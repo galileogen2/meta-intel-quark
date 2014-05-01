@@ -10,6 +10,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=c93c0550bd3173f4504b2cbd8991e50b \
                     file://grub/main.c;beginline=3;endline=9;md5=22a5f28d2130fff9f2a17ed54be90ed6"
 
 PV = "0.97+git${SRCPV}"
+DEFAULT_PREFERENCE = "100"
 
 #check if this is needed 
 RDEPENDS_${PN} = "diffutils"
@@ -28,7 +29,7 @@ SEPB = "${S}"
 #SRCREV = "${AUTOREV}"
 SRCREV = "5775f32a6268dead6939d01cbe72f23972f6d3c0"
 
-inherit autotools deploy
+inherit autotools-brokensep deploy
 
 EXTRA_OECONF = "--without-curses --disable-auto-linux-mem-opt --with-platform=efi --libdir=${STAGING_LIBDIR}"
 
