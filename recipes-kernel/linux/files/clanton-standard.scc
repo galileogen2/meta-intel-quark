@@ -2,7 +2,7 @@ define KMACHINE clanton
 define KTYPE standard
 define KARCH i386
 
-kconf hardware clanton.cfg
+kconf hardware quark.cfg
 
 include features/latencytop.scc
 include features/lttng.scc
