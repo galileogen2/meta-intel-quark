@@ -4769,7 +4769,7 @@ index 0000000..0a754fb
 +
 +./configure --host=i586-poky-linux-uclibc --without-curses --disable-auto-linux-mem-opt --with-platform=efi --libdir="${GNUEFI_LIBDIR}"
 diff --git a/configure.in b/configure.in
-index e9745e6..9fdd3a3 100644
+index e9745e6..53dc0b7 100644
 --- a/configure.in
 +++ b/configure.in
 @@ -63,7 +63,7 @@ if test "x$platform" = xefi; then
@@ -4781,8 +4781,43 @@ index e9745e6..9fdd3a3 100644
  gnuefi_crt0=${gnuefi_path}/crt0-efi-${EFI_ARCH}.o
  if ! test -f $gnuefi_crt0 ; then
    gnuefi_crt0=crt0-efi.o
-@@ -177,7 +177,7 @@ if test "x$ac_cv_prog_gcc" = xyes; then
+@@ -158,26 +158,27 @@ if test "x$ac_cv_prog_gcc" = xyes; then
+     else
+       STAGE2_CFLAGS="-O2 -fno-strength-reduce -fno-unroll-loops"
+     fi
+-    # OpenBSD has a GCC extension for protecting applications from
+-    # stack smashing attacks, but GRUB doesn't want this feature.
+-    AC_CACHE_CHECK([whether gcc has -fno-stack-protector],
+-		   no_stack_protector_flag, [
+-      saved_CFLAGS=$CFLAGS
+-      CFLAGS="-fno-stack-protector"
+-      AC_TRY_COMPILE(,
+-		     ,
+-		     no_stack_protector_flag=yes,
+-		     no_stack_protector_flag=no)
+-      CFLAGS=$saved_CFLAGS
+-    ])
+-    if test "x$no_stack_protector_flag" = xyes; then
+-      STAGE2_CFLAGS="$STAGE2_CFLAGS -fno-stack-protector"
+-    fi
+   fi
  fi
++# Some distributions have a GCC extension for protecting applications from
++# stack smashing attacks, but GRUB doesn't want this feature.
++AC_CACHE_CHECK([whether gcc has -fno-stack-protector],
++ no_stack_protector_flag, [
++  saved_CFLAGS=$CFLAGS
++  CFLAGS="-fno-stack-protector"
++  AC_TRY_COMPILE(, ,
++   no_stack_protector_flag=yes,
++   no_stack_protector_flag=no)
++  CFLAGS=$saved_CFLAGS
++])
++if test "x$no_stack_protector_flag" = xyes; then
++  #In case fstack-protector is in the CFLAGS, remove it
++  CFLAGS="`echo $CFLAGS | sed -e 's/-fstack-protector//g'` -g"
++  STAGE2_CFLAGS="$STAGE2_CFLAGS -fno-stack-protector"
++fi
  STAGE2_CFLAGS="$STAGE2_CFLAGS -isystem `$CC -print-file-name=include`"
  
 -LIBGCC=$(gcc $CFLAGS -static-libgcc -print-libgcc-file-name)
@@ -4790,15 +4825,22 @@ index e9745e6..9fdd3a3 100644
  AC_SUBST(LIBGCC)
  
  LOADER_LDFLAGS="-Wl,--build-id=none ${LIBGCC}"
-@@ -285,7 +285,7 @@ AC_CHECK_LIB(util, opendisk, [GRUB_LIBS="$GRUB_LIBS -lutil"
+@@ -285,10 +286,12 @@ AC_CHECK_LIB(util, opendisk, [GRUB_LIBS="$GRUB_LIBS -lutil"
  
  # Unless the user specify --without-curses, check for curses.
  if test "x$with_curses" != "xno"; then
 -  AC_CHECK_LIB(ncurses, wgetch, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lncurses -ltinfo -Wl,-Bdynamic"
-+  AC_CHECK_LIB(ncurses, wgetch, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lncurses -Wl,-Bdynamic"
++  AC_CHECK_LIB(ncurses, tgetent, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lncurses -Wl,-Bdynamic"
    AC_DEFINE(HAVE_LIBCURSES, 1, [Define if you have a curses library])],
-     [AC_CHECK_LIB(curses, wgetch, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lcurses -Wl,-Bdynamic"
-        AC_DEFINE(HAVE_LIBCURSES, 1, [Define if you have a curses library])])])
+-    [AC_CHECK_LIB(curses, wgetch, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lcurses -Wl,-Bdynamic"
+-       AC_DEFINE(HAVE_LIBCURSES, 1, [Define if you have a curses library])])])
++    [AC_CHECK_LIB(curses, tgetent, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lcurses -Wl,-Bdynamic"
++       AC_DEFINE(HAVE_LIBCURSES, 1, [Define if you have a curses library])],
++         [AC_CHECK_LIB(tinfo, tgetent, [GRUB_LIBS="$GRUB_LIBS -Wl,-Bstatic -lncurses -ltinfo -Wl,-Bdynamic"
++            AC_DEFINE(HAVE_LIBCURSES, 1, [Define if you have a curses library])])])])
+ fi
+ 
+ AC_SUBST(GRUB_LIBS)
 diff --git a/docs/Makefile.in b/docs/Makefile.in
 deleted file mode 100644
 index f350fcd..0000000
@@ -11852,7 +11894,7 @@ index 1d5bd15..3ae0ca5 100644
  endif
 diff --git a/efi/clanton/asset.c b/efi/clanton/asset.c
 new file mode 100644
-index 0000000..715d520
+index 0000000..1f21a6c
 --- /dev/null
 +++ b/efi/clanton/asset.c
 @@ -0,0 +1,415 @@
@@ -12020,7 +12062,7 @@ index 0000000..715d520
 +
 +  /* If the asset is signed, seek past CSBH.  */
 +  if (grub_cln_secure || skip_csbh)
-+    spi_offs_intra_module += sizeof (struct grub_cln_sbh);
++    spi_offs_intra_module += SPI_CSBH_OFFS_HARDCODED;
 +
 +  return (ERR_NONE == errnum);
 +}
@@ -12161,7 +12203,7 @@ index 0000000..715d520
 +  if (grub_cln_linux_spi)
 +    {
 +      if (grub_cln_secure || skip_csbh)
-+        spi_offs_intra_module = offset + sizeof (struct grub_cln_sbh);
++        spi_offs_intra_module = offset + SPI_CSBH_OFFS_HARDCODED;
 +      else
 +        spi_offs_intra_module = offset;
 +    }
@@ -12181,7 +12223,7 @@ index 0000000..715d520
 +      {
 +        size = cln_flash_item_len;
 +        if (grub_cln_secure || skip_csbh)
-+          size -= sizeof (struct grub_cln_sbh);
++          size -= SPI_CSBH_OFFS_HARDCODED;
 +      }
 +    else
 +      size = grub_file_size ();
@@ -12191,7 +12233,7 @@ index 0000000..715d520
 +      {
 +        size = cln_flash_item_len;
 +        if (grub_cln_secure || skip_csbh)
-+          size -= sizeof (struct grub_cln_sbh);
++          size -= SPI_CSBH_OFFS_HARDCODED;
 +      }
 +    else
 +      size = grub_file_size ();
@@ -12202,7 +12244,7 @@ index 0000000..715d520
 +      {
 +        size = cln_flash_item_len;
 +        if (grub_cln_secure || skip_csbh)
-+          size -= sizeof (struct grub_cln_sbh);
++          size -= SPI_CSBH_OFFS_HARDCODED;
 +      }
 +    else
 +      size = grub_file_size ();
@@ -12273,10 +12315,10 @@ index 0000000..715d520
 +}
 diff --git a/efi/clanton/asset.h b/efi/clanton/asset.h
 new file mode 100644
-index 0000000..e5d9280
+index 0000000..8deb7b4
 --- /dev/null
 +++ b/efi/clanton/asset.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,54 @@
 +/*
 + * Copyright(c) 2013 Intel Corporation. All rights reserved.
 + *
@@ -12301,6 +12343,10 @@ index 0000000..e5d9280
 +#define GRUB_CLANTON_ASSET_HEADER            1
 +
 +#include <clanton/sbh.h>
++
++/* FIXME Quark software reference implementaion pads the CSBH to align to 1kB.
++   This is hardcoded for now.  But needs to be read from CSBH lenght field.  */
++#define SPI_CSBH_OFFS_HARDCODED              0x400
 +
 +typedef enum
 +{
@@ -12329,10 +12375,10 @@ index 0000000..e5d9280
 +#endif /* ! GRUB_CLANTON_ASSET_HEADER */
 diff --git a/efi/clanton/boot_settings.c b/efi/clanton/boot_settings.c
 new file mode 100644
-index 0000000..5d003e8
+index 0000000..4d3edf4
 --- /dev/null
 +++ b/efi/clanton/boot_settings.c
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,214 @@
 +/*
 + * Copyright(c) 2013 Intel Corporation. All rights reserved.
 + *
@@ -12466,6 +12512,8 @@ index 0000000..5d003e8
 +    {
 +      errnum = 0;
 +       /* Find out whether the Grub was loaded from SPI/flash or SDIO.  */
++       /* FIXME this logic needs to be moved earlier, to detect media as soon as
++          possible.  Ideally to be moved in stage2.c  */
 +       loaded_image = grub_efi_get_loaded_image (grub_efi_image_handle);
 +       grub_cln_loaded_from_spi =
 +           ! grub_get_drive_partition_from_bdev_handle (loaded_image->device_handle,
@@ -12485,6 +12533,21 @@ index 0000000..5d003e8
 +do_load_config_file(char **cfg_file_buffer, int *cfg_file_size, char *source) // from SD or SPI
 +{
 +  int read = 0;
++  struct grub_cln_sbh *sbh = NULL;
++  grub_uint32_t sbh_len = 0;
++
++  *cfg_file_buffer = cfg_buffer;
++
++  if (grub_cln_secure)
++    {
++      sbh = (struct grub_cln_sbh *)cfg_buffer;
++      if (! grub_cln_fetch_sbh (GRUB_CLN_ASSET_CONFIG_CSBH, config_file, sbh))
++        {
++          errnum = ERR_SGN_FILE_NOT_FOUND;
++          return 0;
++	}
++      sbh_len = sbh->security_header.header_len;
++    }
 +
 +  /* Open the configuration file.  */
 +  if (! grub_cln_asset_open (GRUB_CLN_ASSET_CONFIG, config_file))
@@ -12504,13 +12567,11 @@ index 0000000..5d003e8
 +      return 1;
 +    }
 +
-+  *cfg_file_buffer = cfg_buffer;
-+
 +  /* Buffer configuration file.  */
 +  read =
 +    grub_cln_asset_read (GRUB_CLN_ASSET_CONFIG,
 +                         cfg_buffer
-+                         + (grub_cln_secure ? sizeof (struct grub_cln_sbh) : 0),
++                         + sbh_len,
 +                         *cfg_file_size);
 +  grub_cln_asset_close ();
 +  if (read != *cfg_file_size)
@@ -12523,20 +12584,12 @@ index 0000000..5d003e8
 +
 +  if (grub_cln_secure)
 +    {
-+      /* Buffer CSBH if in Secure mode.  */
-+      if (! grub_cln_fetch_sbh (GRUB_CLN_ASSET_CONFIG_CSBH, config_file,
-+                                (struct grub_cln_sbh *) cfg_buffer))
-+        {
-+          errnum = ERR_SGN_FILE_NOT_FOUND;
-+          return 0;
-+	}
-+
 +      /* Validate configuration file.  */
 +      if (! grub_cln_verify_asset_signature ((grub_uint8_t *) cfg_buffer))
 +        errnum = ERR_CLN_VERIFICATION;
 +
 +      /* Mask out the CSBH to the configuration file parser.  */
-+      *cfg_file_buffer += sizeof (struct grub_cln_sbh);
++      *cfg_file_buffer += sbh_len;
 +    }
 +  return 0;
 +}
@@ -12811,10 +12864,10 @@ index 0000000..db69e1b
 +#endif /* ! GRUB_CLANTON_FLASH_HEADER */
 diff --git a/efi/clanton/iarom.c b/efi/clanton/iarom.c
 new file mode 100644
-index 0000000..49fc9b6
+index 0000000..95c6f69
 --- /dev/null
 +++ b/efi/clanton/iarom.c
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,121 @@
 +/*
 + * Copyright(c) 2013 Intel Corporation. All rights reserved.
 + *
@@ -12871,8 +12924,7 @@ index 0000000..49fc9b6
 +/* The OEM RSA Public Key for verifying signature.  */
 +static struct grub_cln_sbh_key_hdr *oem_rsa_key =
 +  (struct grub_cln_sbh_key_hdr *) (GRUB_CLN_S_KEYMOD_ADDR +
-+                                   sizeof (struct grub_cln_sbh) -
-+                                   GRUB_CLN_SBH_PADDING);
++                                   sizeof (struct grub_cln_sbh));
 +
 +/* Initialise the heap descriptor and the buffer.  */
 +static void
@@ -13999,10 +14051,10 @@ index 0000000..97677dd
 +}
 diff --git a/efi/clanton/sbh.h b/efi/clanton/sbh.h
 new file mode 100644
-index 0000000..ad25c5b
+index 0000000..3311dc9
 --- /dev/null
 +++ b/efi/clanton/sbh.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,73 @@
 +/*
 + * Copyright(c) 2013 Intel Corporation. All rights reserved.
 + *
@@ -14032,9 +14084,6 @@ index 0000000..ad25c5b
 +
 +/* Magic number corresponds to "_CSH" in ASCII.  */
 +#define GRUB_CLN_SBH_MAGIC_NUMBER               0x5F435348
-+
-+/* Padding for Clanton Secure Boot Header to match 1kB size.  */
-+#define GRUB_CLN_SBH_PADDING                    0x1B4
 +
 +typedef struct grub_cln_sbh
 +{
@@ -14066,7 +14115,6 @@ index 0000000..ad25c5b
 +  } key_structure;
 +  /* Currently we only support RSA. Hence size is hardcoded.  */
 +  grub_uint8_t signature[0x100];                  /* 0x14C */
-+  grub_uint8_t padding[GRUB_CLN_SBH_PADDING];     /* 0x24C */
 +}
 +*grub_cln_csh_t;
 +
@@ -14538,7 +14586,7 @@ index e1a1e66..ace710c 100644
  
    if (real_stack) {
 diff --git a/efi/ia32/loader/linux.c b/efi/ia32/loader/linux.c
-index d795d28..280fe81 100644
+index d795d28..52ce6cb 100644
 --- a/efi/ia32/loader/linux.c
 +++ b/efi/ia32/loader/linux.c
 @@ -23,15 +23,22 @@
@@ -14567,7 +14615,16 @@ index d795d28..280fe81 100644
  #define NEXT_MEMORY_DESCRIPTOR(desc, size)      \
    ((grub_efi_memory_descriptor_t *) ((char *) (desc) + (size)))
  
-@@ -54,6 +61,14 @@ static grub_efi_uintn_t prot_mode_pages;
+@@ -44,6 +51,8 @@
+ #define SECTOR_BITS 9
+ #endif /* defined(SECTOR_BITS) */
+ 
++#define PAGE_SIZE 0x1000
++
+ static unsigned long linux_mem_size;
+ static int loaded;
+ static void *real_mode_mem;
+@@ -54,6 +63,15 @@ static grub_efi_uintn_t prot_mode_pages;
  static grub_efi_uintn_t initrd_pages;
  static grub_efi_guid_t graphics_output_guid = GRUB_EFI_GRAPHICS_OUTPUT_GUID;
  
@@ -14578,11 +14635,12 @@ index d795d28..280fe81 100644
 +
 +/* The Clanton Secure Boot Header.  */
 +static struct grub_cln_sbh cln_sbh;
++static grub_uint32_t sbh_len = 0;
 +
  static inline grub_size_t
  page_align (grub_size_t size)
  {
-@@ -114,9 +129,14 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
+@@ -114,9 +132,14 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
    /* Initialize the memory pointers with NULL for convenience.  */
    real_mode_mem = 0;
    prot_mode_mem = 0;
@@ -14598,7 +14656,7 @@ index d795d28..280fe81 100644
  
    addr = 0;
    mmap_end = NEXT_MEMORY_DESCRIPTOR (mmap_buf, mmap_size);
-@@ -144,7 +164,11 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
+@@ -144,7 +167,11 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
                          (unsigned) real_mode_pages, (unsigned) addr);
            real_mode_mem = grub_efi_allocate_pages (addr, real_mode_pages);
            if (! real_mode_mem)
@@ -14611,7 +14669,7 @@ index d795d28..280fe81 100644
  
            desc->num_pages -= real_mode_pages;
            break;
-@@ -160,9 +184,14 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
+@@ -160,9 +187,14 @@ allocate_pages (grub_size_t real_size, grub_size_t prot_size)
  
    /* Next, find free pages for the protected mode code.  */
    /* XXX what happens if anything is using this address?  */
@@ -14628,7 +14686,7 @@ index d795d28..280fe81 100644
  
    return 1;
  
-@@ -224,7 +253,11 @@ big_linux_boot (void)
+@@ -224,7 +256,11 @@ big_linux_boot (void)
    graphics_set_kernel_params (params);
  
    if (grub_efi_get_memory_map (&map_key, &desc_size, &desc_version) <= 0)
@@ -14641,7 +14699,7 @@ index d795d28..280fe81 100644
  
    /* Pass e820 memmap. */
    e820_map_from_efi_map ((struct e820_entry *) params->e820_map, &e820_nr_map,
-@@ -232,8 +265,14 @@ big_linux_boot (void)
+@@ -232,8 +268,14 @@ big_linux_boot (void)
    params->e820_nr_map = e820_nr_map;
  
    grub_dprintf(__func__,"got to ExitBootServices...\n");
@@ -14657,7 +14715,7 @@ index d795d28..280fe81 100644
    /* Note that no boot services are available from here.  */
  
    lh = &params->hdr;
-@@ -278,6 +317,13 @@ big_linux_boot (void)
+@@ -278,6 +320,13 @@ big_linux_boot (void)
    grub_memset((void *)gdt_addr.base, gdt_addr.limit, 0);
    grub_memcpy((void *)gdt_addr.base, init_gdt, sizeof (init_gdt));
  
@@ -14671,7 +14729,7 @@ index d795d28..280fe81 100644
    if (0) {
      /* copy our real mode transition code to 0x7C00 */
      memcpy ((void *) 0x7C00, switch_image, switch_size);
-@@ -311,28 +357,75 @@ big_linux_boot (void)
+@@ -311,28 +360,80 @@ big_linux_boot (void)
    for (;;);
  }
  
@@ -14724,6 +14782,8 @@ index d795d28..280fe81 100644
 +  grub_size_t real_size = 0, prot_size = 0, img_size = 0;
 +  grub_uint32_t code32_start_offs = 0x0, prot_mode_offs = 0x0;;
 +  grub_ssize_t len = 0;
++
++  sbh_len = 0;
  
 -  if (kernel == NULL)
 +  __cln_test_setup(arg);
@@ -14737,13 +14797,16 @@ index d795d28..280fe81 100644
      }
  
 -  if (! grub_open (kernel))
-+  if (grub_cln_secure
-+      && ! grub_cln_fetch_sbh (GRUB_CLN_ASSET_KERNEL_CSBH, kernel, &cln_sbh))
++  if (grub_cln_secure)
 +    {
-+      if(ERR_FILE_NOT_FOUND == errnum
-+          && ! grub_cln_linux_spi)
-+        errnum = ERR_SGN_FILE_NOT_FOUND;
-+      goto fail1;
++       if (! grub_cln_fetch_sbh (GRUB_CLN_ASSET_KERNEL_CSBH, kernel, &cln_sbh))
++         {
++           if(ERR_FILE_NOT_FOUND == errnum
++               && ! grub_cln_linux_spi)
++             errnum = ERR_SGN_FILE_NOT_FOUND;
++           goto fail1;
++         }
++       sbh_len = cln_sbh.security_header.header_len;
 +    }
 +
 +  if (! grub_cln_asset_open (GRUB_CLN_ASSET_KERNEL, kernel))
@@ -14754,7 +14817,7 @@ index d795d28..280fe81 100644
        != sizeof (params_buf))
      {
        errnum = ERR_EXEC_FORMAT;
-@@ -371,13 +464,48 @@ grub_load_linux (char *kernel, char *arg)
+@@ -371,13 +472,48 @@ grub_load_linux (char *kernel, char *arg)
  
    setup_sects = lh->setup_sects;
  
@@ -14773,9 +14836,9 @@ index d795d28..280fe81 100644
 +     accordingly.  */
 +  if (grub_cln_secure)
 +    {
-+      prot_size = img_size + sizeof (cln_sbh);
++      prot_size = img_size + sbh_len;
 +      code32_start_offs += (setup_sects << SECTOR_BITS) + SECTOR_SIZE
-+                           + sizeof (cln_sbh);
++                           + sbh_len;
 +	}
 +
 +  else
@@ -14805,7 +14868,7 @@ index d795d28..280fe81 100644
    lh->type_of_loader = 0x50;
  
    lh->cmd_line_ptr = (grub_uint32_t) (unsigned long) real_mode_mem + 0x1000;
-@@ -394,6 +522,11 @@ grub_load_linux (char *kernel, char *arg)
+@@ -394,6 +530,11 @@ grub_load_linux (char *kernel, char *arg)
  
    grub_memmove(&params->hdr, lh, 0x202 + lh->jump_off - 0x1f1);
  
@@ -14817,7 +14880,7 @@ index d795d28..280fe81 100644
    params->cl_magic = GRUB_LINUX_CL_MAGIC;
    params->cl_offset = 0x1000;
  
-@@ -446,9 +579,13 @@ grub_load_linux (char *kernel, char *arg)
+@@ -446,9 +587,13 @@ grub_load_linux (char *kernel, char *arg)
    params->eddbuf_entries = 0;
    params->edd_mbr_sig_buf_entries = 0;
  
@@ -14833,7 +14896,7 @@ index d795d28..280fe81 100644
  
    /* Check the mem= option to limit memory used for initrd.  */
    {
-@@ -504,12 +641,41 @@ grub_load_linux (char *kernel, char *arg)
+@@ -504,12 +649,41 @@ grub_load_linux (char *kernel, char *arg)
        linux_mem_size = 0;
    }
  
@@ -14850,9 +14913,9 @@ index d795d28..280fe81 100644
 +  if (grub_cln_secure)
 +    {
 +      grub_cln_asset_seek (0);
-+      prot_size -= sizeof (cln_sbh);
++      prot_size -= sbh_len;
 +      grub_memcpy (prot_mode_mem, &cln_sbh, sizeof (cln_sbh));
-+      prot_mode_offs += sizeof (cln_sbh);
++      prot_mode_offs += sbh_len;
 +    }
 +  else
 +    grub_cln_asset_seek ((setup_sects << SECTOR_BITS) + SECTOR_SIZE);
@@ -14869,7 +14932,7 @@ index d795d28..280fe81 100644
 +      grub_printf ("Couldn't read file");
 +      goto fail;
 +    }
-+ 
++
 +  /* Verify the kernel signature.  */
 +  if (grub_cln_secure &&
 +      ! grub_cln_verify_asset_signature ((grub_uint8_t *) prot_mode_mem))
@@ -14879,29 +14942,34 @@ index d795d28..280fe81 100644
  
    if (errnum == ERR_NONE)
      {
-@@ -543,7 +709,8 @@ grub_load_initrd (char *initrd)
+@@ -543,7 +717,10 @@ grub_load_initrd (char *initrd)
    grub_efi_uint32_t desc_version;
    struct linux_kernel_params *params;
  
 -  if (initrd == NULL)
++  sbh_len = 0;
++
 +  /* In SPI/Flash mode, file system path to initrd is not required.  */
 +  if (! grub_cln_initrd_spi && initrd == NULL)
      {
        errnum = ERR_BAD_FILENAME;
        grub_printf ("No module specified");
-@@ -557,10 +724,25 @@ grub_load_initrd (char *initrd)
+@@ -557,10 +734,28 @@ grub_load_initrd (char *initrd)
        goto fail1;
      }
  
 -  if (! grub_open (initrd))
 +
-+  if (grub_cln_secure
-+      && ! grub_cln_fetch_sbh (GRUB_CLN_ASSET_INITRD_CSBH, initrd, &cln_sbh))
++  if (grub_cln_secure)
 +    {
-+      if (ERR_FILE_NOT_FOUND == errnum
-+          && ! grub_cln_initrd_spi)
-+        errnum = ERR_SGN_FILE_NOT_FOUND;
-+      goto fail1;
++      if (! grub_cln_fetch_sbh (GRUB_CLN_ASSET_INITRD_CSBH, initrd, &cln_sbh))
++        {
++          if (ERR_FILE_NOT_FOUND == errnum
++              && ! grub_cln_initrd_spi)
++            errnum = ERR_SGN_FILE_NOT_FOUND;
++          goto fail1;
++        }
++      sbh_len = cln_sbh.security_header.header_len;
 +    }
 +
 +  if (! grub_cln_asset_open (GRUB_CLN_ASSET_INITRD, initrd))
@@ -14910,14 +14978,14 @@ index d795d28..280fe81 100644
 -  size = grub_file_size ();
 +  size = grub_cln_asset_size (GRUB_CLN_ASSET_INITRD);
 +
-+  /* If Clanton secure boot, make room for CSBH.  */
++  /* If Clanton secure boot, make room for CSBH (dedicated page).  */
 +  if (grub_cln_secure)
-+    size += sizeof (cln_sbh);
++    size += PAGE_SIZE;
 +
    initrd_pages = (page_align (size) >> 12);
  
    params = (struct linux_kernel_params *) real_mode_mem;
-@@ -583,7 +765,11 @@ grub_load_initrd (char *initrd)
+@@ -583,7 +778,11 @@ grub_load_initrd (char *initrd)
  
    /* Find the highest address to put the initrd.  */
    if (grub_efi_get_memory_map (&map_key, &desc_size, &desc_version) <= 0)
@@ -14930,7 +14998,7 @@ index d795d28..280fe81 100644
  
    mmap_end = NEXT_MEMORY_DESCRIPTOR (mmap_buf, mmap_size);
    addr = 0;
-@@ -626,17 +812,41 @@ grub_load_initrd (char *initrd)
+@@ -626,17 +825,54 @@ grub_load_initrd (char *initrd)
  
    initrd_mem = grub_efi_allocate_pages (addr, initrd_pages);
    if (! initrd_mem)
@@ -14942,17 +15010,24 @@ index d795d28..280fe81 100644
 +      errnum = ERR_WONT_FIT;
 +      goto fail;
 +    }
-+
-+  /* Clanton secure boot requires the CSBH to be prepended to the Initrd.  */
-+  if (grub_cln_secure)
-+    {
-+      size -= sizeof (cln_sbh);
-+      grub_memcpy (initrd_mem, &cln_sbh, sizeof (cln_sbh));
-+      initrd_mem = (grub_uint8_t *)initrd_mem + sizeof (cln_sbh);
-+      addr += sizeof (cln_sbh);
-+  }
  
 -  if (grub_read (initrd_mem, size) != size)
++  /*
++     Clanton secure boot requires the CSBH to be prepended to the Initrd.
++     Since Linux requires the Initrd to be page-aligned, do the following:
++     1. copy Initrd to the 2nd allocated page
++     2. copy the CSBH to the 1st allocated page at an offset such that
++        CSBH and Initrd are adjacent
++   */
++  if (grub_cln_secure)
++    {
++      size -= PAGE_SIZE;
++      grub_memcpy ((grub_uint8_t *) initrd_mem + PAGE_SIZE - sbh_len,
++                   &cln_sbh, sizeof (cln_sbh));
++      initrd_mem = (grub_uint8_t *) initrd_mem + PAGE_SIZE;
++      addr += PAGE_SIZE;
++    }
++
 +  if (grub_cln_asset_read (GRUB_CLN_ASSET_INITRD, initrd_mem, size) != size)
      {
 +      errnum = ERR_EXEC_FORMAT;
@@ -14966,13 +15041,19 @@ index d795d28..280fe81 100644
 +               grub_cln_initrd_spi ? " SPI" : "",
 +               (unsigned int) addr, (unsigned int) size);
 +
-+  /* Verify the initrd signature.  */
-+  if (grub_cln_secure &&
-+      ! grub_cln_verify_asset_signature
-+          ((grub_uint8_t *) initrd_mem - sizeof (cln_sbh)))
++  if (grub_cln_secure)
 +    {
-+      errnum = ERR_CLN_VERIFICATION;
-+      goto fail;
++      /* Verify the initrd signature.  */
++      if (! grub_cln_verify_asset_signature ((grub_uint8_t *)
++                                             initrd_mem - sbh_len))
++        {
++          errnum = ERR_CLN_VERIFICATION;
++          goto fail;
++        }
++
++      /* Free up page allocated to CSBH.  */
++      grub_efi_free_pages ((grub_addr_t)
++                           ((grub_uint8_t *) initrd_mem - PAGE_SIZE), 1);
 +    }
  
    params->hdr.ramdisk_image = addr;
