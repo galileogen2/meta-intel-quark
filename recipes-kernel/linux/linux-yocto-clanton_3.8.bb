@@ -59,7 +59,6 @@ LINUX_VERSION_EXTENSION ?= "-clanton"
 # Override SRCREV to point to a different commit in a bbappend file to
 # build a different release of the Linux kernel.
 SRCREV = "531ec28f9f26f78797124b9efcf2138b89794a1e"
-SRCREV_machine_clanton = "531ec28f9f26f78797124b9efcf2138b89794a1e"
 
 PR = "r0"
 PV = "${LINUX_VERSION}"
