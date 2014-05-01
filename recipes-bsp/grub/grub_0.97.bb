@@ -21,7 +21,7 @@ SRC_URI = "git://github.com/vathpela/grub-fedora.git"
 SRC_URI += "file://clanton.patch"
 
 CFLAGS_append = " -Os -fno-strict-aliasing -Wall -Werror -Wno-shadow -Wno-unused  -Wno-pointer-sign \
-  -DINTEL_CLN_TEST=1"
+  -DINTEL_QUARK_TEST=1"
 
 S = "${WORKDIR}/git"
 SEPB = "${S}"
