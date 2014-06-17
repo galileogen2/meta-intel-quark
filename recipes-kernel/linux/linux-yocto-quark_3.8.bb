@@ -49,23 +49,23 @@ require recipes-kernel/linux/linux-yocto.inc
 SRC_URI = "git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git;branch=linux-3.8.y"
 
 SRC_URI += "file://quark.cfg"
-SRC_URI += "file://clanton-standard.scc"
+SRC_URI += "file://quark-standard.scc"
 SRC_URI += "file://0001-libtraceevent-Remove-hard-coded-include-to-usr-local.patch"
 
 LINUX_VERSION ?= "3.8"
-LINUX_VERSION_EXTENSION ?= "-clanton"
+LINUX_VERSION_EXTENSION ?= "-quark"
 
 # Override SRCREV to point to a different commit in a bbappend file to
 # build a different release of the Linux kernel.
 SRCREV = "531ec28f9f26f78797124b9efcf2138b89794a1e"
-SRCREV_machine_clanton = "531ec28f9f26f78797124b9efcf2138b89794a1e"
+SRCREV_machine_quark = "531ec28f9f26f78797124b9efcf2138b89794a1e"
 
 PR = "r0"
 PV = "${LINUX_VERSION}"
 
 # Override COMPATIBLE_MACHINE to include your machine in a bbappend
 # file. Leaving it empty here ensures an early explicit build failure.
-COMPATIBLE_MACHINE = "clanton"
+COMPATIBLE_MACHINE = "quark"
 
 RDEPENDS_kernel-base=""
 
