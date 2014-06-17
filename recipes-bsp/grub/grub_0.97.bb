@@ -12,14 +12,14 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=c93c0550bd3173f4504b2cbd8991e50b \
 PV = "0.97+git${SRCPV}"
 DEFAULT_PREFERENCE = "100"
 
-#check if this is needed 
+#check if this is needed
 RDEPENDS_${PN} = "diffutils"
 DEPENDS = "gnu-efi"
 PR = "r0"
 
 SRC_URI = "git://github.com/vathpela/grub-fedora.git"
 
-SRC_URI += "file://clanton.patch"
+SRC_URI += "file://quark.patch"
 
 CFLAGS_append = " -Os -fno-strict-aliasing -Wall -Werror -Wno-shadow -Wno-unused  -Wno-pointer-sign "
 
