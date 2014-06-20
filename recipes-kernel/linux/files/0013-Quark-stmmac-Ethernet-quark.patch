@@ -1,24 +1,24 @@
 From xxxx Mon Sep 17 00:00:00 2001
 From: Krzysztof Sywula <krzysztof.m.sywula@intel.com>
-Date: Thu, 20 Feb 2014 15:16:30 +0000
+Date: Wed, 9 Apr 2014 15:29:52 +0100
 Subject: [PATCH 13/21] Quark stmmac Ethernet
 
 ---
- drivers/net/ethernet/stmicro/stmmac/Kconfig        |   25 +-
- drivers/net/ethernet/stmicro/stmmac/Makefile       |    1 +
- drivers/net/ethernet/stmicro/stmmac/common.h       |   14 +-
- drivers/net/ethernet/stmicro/stmmac/descs.h        |   45 ++-
- drivers/net/ethernet/stmicro/stmmac/dwmac1000.h    |   64 ++-
- .../net/ethernet/stmicro/stmmac/dwmac1000_core.c   |  139 ++++-
- .../net/ethernet/stmicro/stmmac/dwmac1000_dma.c    |    9 +-
- .../net/ethernet/stmicro/stmmac/dwmac100_core.c    |    6 +-
- drivers/net/ethernet/stmicro/stmmac/mmc_core.c     |    1 +
- drivers/net/ethernet/stmicro/stmmac/stmmac.h       |   76 ++
- .../net/ethernet/stmicro/stmmac/stmmac_ethtool.c   |   21 +-
- drivers/net/ethernet/stmicro/stmmac/stmmac_main.c  |  163 ++++-
- drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c   |  263 +++++++-
- drivers/net/ethernet/stmicro/stmmac/stmmac_ptp.c   |  723 ++++++++++++++++++++
- 14 files changed, 1476 insertions(+), 74 deletions(-)
+ drivers/net/ethernet/stmicro/stmmac/Kconfig        |  25 +-
+ drivers/net/ethernet/stmicro/stmmac/Makefile       |   1 +
+ drivers/net/ethernet/stmicro/stmmac/common.h       |  14 +-
+ drivers/net/ethernet/stmicro/stmmac/descs.h        |  45 +-
+ drivers/net/ethernet/stmicro/stmmac/dwmac1000.h    |  64 +-
+ .../net/ethernet/stmicro/stmmac/dwmac1000_core.c   | 139 +++-
+ .../net/ethernet/stmicro/stmmac/dwmac1000_dma.c    |   9 +-
+ .../net/ethernet/stmicro/stmmac/dwmac100_core.c    |   6 +-
+ drivers/net/ethernet/stmicro/stmmac/mmc_core.c     |   1 +
+ drivers/net/ethernet/stmicro/stmmac/stmmac.h       |  76 +++
+ .../net/ethernet/stmicro/stmmac/stmmac_ethtool.c   |  21 +-
+ drivers/net/ethernet/stmicro/stmmac/stmmac_main.c  | 163 ++++-
+ drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c   | 275 +++++++-
+ drivers/net/ethernet/stmicro/stmmac/stmmac_ptp.c   | 723 +++++++++++++++++++++
+ 14 files changed, 1488 insertions(+), 74 deletions(-)
  create mode 100644 drivers/net/ethernet/stmicro/stmmac/stmmac_ptp.c
 
 diff --git a/drivers/net/ethernet/stmicro/stmmac/Kconfig b/drivers/net/ethernet/stmicro/stmmac/Kconfig
@@ -1153,10 +1153,10 @@ index b75f4b2..aaccd3a 100644
  	free_netdev(ndev);
  
 diff --git a/drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c b/drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c
-index 064eaac..f7afcad 100644
+index 064eaac..ac32842 100644
 --- a/drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c
 +++ b/drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c
-@@ -23,32 +23,194 @@
+@@ -23,31 +23,205 @@
    Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
  *******************************************************************************/
  
@@ -1183,7 +1183,9 @@ index 064eaac..f7afcad 100644
 +MODULE_PARM_DESC(enable_msi, "Enable PCI MSI mode");
 +
 +static int bus_id = 1;
++#if 0
 +static char stmmac_mac_data[MAX_INTERFACES][ETH_ALEN];
++#endif
 +
 +struct stmmac_qrk_mac_data {
 +	int phy_addr;
@@ -1252,6 +1254,16 @@ index 064eaac..f7afcad 100644
 +		.bus_id		= 2,
 +		.name 		= "Galileo",
 +	},
++	{
++		.phy_addr	= 1,
++		.bus_id		= 1,
++		.name		= "GalileoGen2",
++	},
++	{
++		.phy_addr	= -1,			/* not connected */
++		.bus_id		= 2,
++		.name		= "GalileoGen2",
++	},
 +};
 +
 +
@@ -1270,26 +1282,10 @@ index 064eaac..f7afcad 100644
 +
 +	return -1;
 +}
- 
--static void stmmac_default_data(void)
++
 +static int stmmac_default_data(struct plat_stmmacenet_data *plat_dat,
 +			       int mdio_bus_id, const struct pci_device_id *id)
- {
--	memset(&plat_dat, 0, sizeof(struct plat_stmmacenet_data));
--	plat_dat.bus_id = 1;
--	plat_dat.phy_addr = 0;
--	plat_dat.interface = PHY_INTERFACE_MODE_GMII;
--	plat_dat.clk_csr = 2;	/* clk_csr_i = 20-35MHz & MDC = clk_csr_i/16 */
--	plat_dat.has_gmac = 1;
--	plat_dat.force_sf_dma_mode = 1;
--
--	mdio_data.phy_reset = NULL;
--	mdio_data.phy_mask = 0;
--	plat_dat.mdio_bus_data = &mdio_data;
--
--	dma_cfg.pbl = 32;
--	dma_cfg.burst_len = DMA_AXI_BLEN_256;
--	plat_dat.dma_cfg = &dma_cfg;
++{
 +	int phy_addr = 0;
 +	memset(plat_dat, 0, sizeof(struct plat_stmmacenet_data));
 +
@@ -1342,8 +1338,9 @@ index 064eaac..f7afcad 100644
 +	}
 +
 +	return 0;
- }
++}
  
+-static void stmmac_default_data(void)
 +#if 0
 +/**
 + * stmmac_pci_find_mac
@@ -1355,7 +1352,22 @@ index 064eaac..f7afcad 100644
 + * a random one for itself in any case
 + */
 +void stmmac_pci_find_mac (struct stmmac_priv * priv, unsigned int mdio_bus_id)
-+{
+ {
+-	memset(&plat_dat, 0, sizeof(struct plat_stmmacenet_data));
+-	plat_dat.bus_id = 1;
+-	plat_dat.phy_addr = 0;
+-	plat_dat.interface = PHY_INTERFACE_MODE_GMII;
+-	plat_dat.clk_csr = 2;	/* clk_csr_i = 20-35MHz & MDC = clk_csr_i/16 */
+-	plat_dat.has_gmac = 1;
+-	plat_dat.force_sf_dma_mode = 1;
+-
+-	mdio_data.phy_reset = NULL;
+-	mdio_data.phy_mask = 0;
+-	plat_dat.mdio_bus_data = &mdio_data;
+-
+-	dma_cfg.pbl = 32;
+-	dma_cfg.burst_len = DMA_AXI_BLEN_256;
+-	plat_dat.dma_cfg = &dma_cfg;
 +	unsigned int id = mdio_bus_id - 1;
 +	if (priv == NULL || id >= MAX_INTERFACES)
 +		return;
@@ -1364,13 +1376,12 @@ index 064eaac..f7afcad 100644
 +		(char*)&stmmac_mac_data[id]) == 0){
 +		memcpy(priv->dev->dev_addr, &stmmac_mac_data[id], ETH_ALEN);
 +	}
-+}
+ }
 +#endif
-+
+ 
  /**
   * stmmac_pci_probe
-  *
-@@ -67,8 +229,21 @@ static int stmmac_pci_probe(struct pci_dev *pdev,
+@@ -67,8 +241,21 @@ static int stmmac_pci_probe(struct pci_dev *pdev,
  	int ret = 0;
  	void __iomem *addr = NULL;
  	struct stmmac_priv *priv = NULL;
@@ -1392,7 +1403,7 @@ index 064eaac..f7afcad 100644
  	/* Enable pci device */
  	ret = pci_enable_device(pdev);
  	if (ret) {
-@@ -96,30 +271,51 @@ static int stmmac_pci_probe(struct pci_dev *pdev,
+@@ -96,30 +283,51 @@ static int stmmac_pci_probe(struct pci_dev *pdev,
  		break;
  	}
  	pci_set_master(pdev);
@@ -1449,7 +1460,7 @@ index 064eaac..f7afcad 100644
  	return ret;
  }
  
-@@ -138,6 +334,21 @@ static void stmmac_pci_remove(struct pci_dev *pdev)
+@@ -138,6 +346,21 @@ static void stmmac_pci_remove(struct pci_dev *pdev)
  	stmmac_dvr_remove(ndev);
  
  	pci_set_drvdata(pdev, NULL);
@@ -1471,7 +1482,7 @@ index 064eaac..f7afcad 100644
  	pci_iounmap(pdev, priv->ioaddr);
  	pci_release_regions(pdev);
  	pci_disable_device(pdev);
-@@ -167,12 +378,10 @@ static int stmmac_pci_resume(struct pci_dev *pdev)
+@@ -167,12 +390,10 @@ static int stmmac_pci_resume(struct pci_dev *pdev)
  }
  #endif
  
@@ -2214,6 +2225,3 @@ index 0000000..8552d0c
 +	}
 +}
 +
--- 
-1.7.4.1
-

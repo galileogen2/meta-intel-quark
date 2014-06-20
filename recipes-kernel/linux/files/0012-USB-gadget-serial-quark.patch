@@ -1,14 +1,14 @@
 From xxxx Mon Sep 17 00:00:00 2001
 From: Bryan O'Donoghue <bryan.odonoghue@intel.com>
-Date: Thu, 13 Feb 2014 16:41:02 +0000
+Date: Thu, 8 May 2014 14:28:54 +0100
 Subject: [PATCH 12/21] USB gadget serial
 
 ---
- Documentation/usb/linux-cdc-acm.inf |    4 +-
- drivers/usb/gadget/Kconfig          |    5 +-
- drivers/usb/gadget/pch_udc.c        |  142 ++++++++++++++++++++++------------
- drivers/usb/gadget/serial.c         |   24 +++++-
- 4 files changed, 118 insertions(+), 57 deletions(-)
+ Documentation/usb/linux-cdc-acm.inf |   4 +-
+ drivers/usb/gadget/Kconfig          |   5 +-
+ drivers/usb/gadget/pch_udc.c        | 147 ++++++++++++++++++++++++------------
+ drivers/usb/gadget/serial.c         |  24 +++++-
+ 4 files changed, 123 insertions(+), 57 deletions(-)
 
 diff --git a/Documentation/usb/linux-cdc-acm.inf b/Documentation/usb/linux-cdc-acm.inf
 index f0ffc27..e56f074 100644
@@ -51,7 +51,7 @@ index 14625fd..1ab9996 100644
  # LAST -- dummy/emulated controller
  #
 diff --git a/drivers/usb/gadget/pch_udc.c b/drivers/usb/gadget/pch_udc.c
-index 6490c00..df96b3b 100644
+index 6490c00..618261f 100644
 --- a/drivers/usb/gadget/pch_udc.c
 +++ b/drivers/usb/gadget/pch_udc.c
 @@ -6,6 +6,7 @@
@@ -99,7 +99,7 @@ index 6490c00..df96b3b 100644
  #define PCI_VENDOR_ID_ROHM		0x10DB
  #define PCI_DEVICE_ID_ML7213_IOH_UDC	0x801D
  #define PCI_DEVICE_ID_ML7831_IOH_UDC	0x8808
-@@ -2779,55 +2788,70 @@ static irqreturn_t pch_udc_isr(int irq, void *pdev)
+@@ -2779,55 +2788,75 @@ static irqreturn_t pch_udc_isr(int irq, void *pdev)
  {
  	struct pch_udc_dev *dev = (struct pch_udc_dev *) pdev;
  	u32 dev_intr, ep_intr;
@@ -115,7 +115,7 @@ index 6490c00..df96b3b 100644
 -			/* The controller is reset */
 -			pch_udc_writel(dev, UDC_SRST, UDC_SRST_ADDR);
 -			return IRQ_HANDLED;
-+	int i, events = 0;
++	int i, events = 0, count = 0;
 +
 +	mask_pvm(dev->pdev);
 +	do {
@@ -136,6 +136,7 @@ index 6490c00..df96b3b 100644
 +			/* Clear device interrupts */
 +			pch_udc_write_device_interrupts(dev, dev_intr);
 +			events = 1;
++			count = 1;
  		}
 -	if (dev_intr)
 -		/* Clear device interrupts */
@@ -158,6 +159,7 @@ index 6490c00..df96b3b 100644
 +			/* Clear ep interrupts */
 +			pch_udc_write_ep_interrupts(dev, ep_intr);
 +			events = 1;
++			count = 1;
  		}
 -		/* Process Control Out interrupts, if present */
 -		if (ep_intr & UDC_EPINT_OUT_EP0)
@@ -169,7 +171,10 @@ index 6490c00..df96b3b 100644
 -				pch_udc_postsvc_epinters(dev, i);
 +		if (!dev_intr && !ep_intr){
 +			unmask_pvm(dev->pdev);
-+			return IRQ_NONE;
++			if (count)
++				return IRQ_HANDLED;
++			else
++				return IRQ_NONE;
 +		}
 +		spin_lock(&dev->lock);
 +		if (dev_intr){
@@ -181,7 +186,7 @@ index 6490c00..df96b3b 100644
 +			if (ep_intr & UDC_EPINT_IN_EP0) {
 +				pch_udc_svc_control_in(dev);
 +				pch_udc_postsvc_epinters(dev, 0);
-+			}
+ 			}
 +			/* Process Control Out interrupts, if present */
 +			if (ep_intr & UDC_EPINT_OUT_EP0)
 +				pch_udc_svc_control_out(dev);
@@ -191,7 +196,7 @@ index 6490c00..df96b3b 100644
 +					pch_udc_svc_data_in(dev, i);
 +					pch_udc_postsvc_epinters(dev, i);
 +				}
- 			}
++			}
 +			/* Process data out end point interrupts */
 +			for (i = UDC_EPINT_OUT_SHIFT + 1;
 +				i < (UDC_EPINT_OUT_SHIFT + PCH_UDC_USED_EP_NUM);
@@ -215,7 +220,7 @@ index 6490c00..df96b3b 100644
  	return IRQ_HANDLED;
  }
  
-@@ -3108,7 +3132,7 @@ static void pch_udc_remove(struct pci_dev *pdev)
+@@ -3108,7 +3137,7 @@ static void pch_udc_remove(struct pci_dev *pdev)
  		iounmap(dev->base_addr);
  	if (dev->mem_region)
  		release_mem_region(dev->phys_addr,
@@ -224,7 +229,7 @@ index 6490c00..df96b3b 100644
  	if (dev->active)
  		pci_disable_device(pdev);
  	if (dev->registered)
-@@ -3184,9 +3208,16 @@ static int pch_udc_probe(struct pci_dev *pdev,
+@@ -3184,9 +3213,16 @@ static int pch_udc_probe(struct pci_dev *pdev,
  	dev->active = 1;
  	pci_set_drvdata(pdev, dev);
  
@@ -243,7 +248,7 @@ index 6490c00..df96b3b 100644
  
  	if (!request_mem_region(resource, len, KBUILD_MODNAME)) {
  		dev_err(&pdev->dev, "%s: pci device used already\n", __func__);
-@@ -3213,6 +3244,12 @@ static int pch_udc_probe(struct pci_dev *pdev,
+@@ -3213,6 +3249,12 @@ static int pch_udc_probe(struct pci_dev *pdev,
  		retval = -ENODEV;
  		goto finished;
  	}
@@ -256,7 +261,7 @@ index 6490c00..df96b3b 100644
  	if (request_irq(pdev->irq, pch_udc_isr, IRQF_SHARED, KBUILD_MODNAME,
  			dev)) {
  		dev_err(&pdev->dev, "%s: request_irq(%d) fail\n", __func__,
-@@ -3223,7 +3260,7 @@ static int pch_udc_probe(struct pci_dev *pdev,
+@@ -3223,7 +3265,7 @@ static int pch_udc_probe(struct pci_dev *pdev,
  	dev->irq = pdev->irq;
  	dev->irq_registered = 1;
  
@@ -265,7 +270,7 @@ index 6490c00..df96b3b 100644
  	pci_try_set_mwi(pdev);
  
  	/* device struct setup */
-@@ -3261,6 +3298,11 @@ finished:
+@@ -3261,6 +3303,11 @@ finished:
  
  static DEFINE_PCI_DEVICE_TABLE(pch_udc_pcidev_id) = {
  	{
@@ -343,6 +348,3 @@ index 44752f5..e02a4c9 100644
  		device_desc.bDeviceClass = USB_CLASS_VENDOR_SPEC;
  		device_desc.idProduct =
  				cpu_to_le16(GS_PRODUCT_ID);
--- 
-1.7.4.1
-

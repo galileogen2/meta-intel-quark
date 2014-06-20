@@ -4,10 +4,10 @@ Date: Thu, 13 Feb 2014 13:03:44 +0000
 Subject: [PATCH 11/21] Quark USB host
 
 ---
- drivers/usb/host/ehci-pci.c   |    4 +++
- drivers/usb/host/pci-quirks.c |   42 +++++++++++++++++++++++++++++++++++++++++
- drivers/usb/host/pci-quirks.h |    2 +
- 3 files changed, 48 insertions(+), 0 deletions(-)
+ drivers/usb/host/ehci-pci.c   |  4 ++++
+ drivers/usb/host/pci-quirks.c | 42 ++++++++++++++++++++++++++++++++++++++++++
+ drivers/usb/host/pci-quirks.h |  2 ++
+ 3 files changed, 48 insertions(+)
 
 diff --git a/drivers/usb/host/ehci-pci.c b/drivers/usb/host/ehci-pci.c
 index 170b939..5eac9db 100644
@@ -90,6 +90,3 @@ index 7f69a39..80ffdee 100644
  void usb_enable_xhci_ports(struct pci_dev *xhci_pdev);
  void usb_disable_xhci_ports(struct pci_dev *xhci_pdev);
  #else
--- 
-1.7.4.1
-

@@ -1,18 +1,21 @@
 From xxxx Mon Sep 17 00:00:00 2001
 From: Dan O'Donovan <danielx.o'donovan@intel.com>
-Date: Thu, 13 Feb 2014 16:42:31 +0000
+Date: Wed, 26 Mar 2014 17:36:09 +0000
 Subject: [PATCH 14/21] Quark GPIO 2/2
 
 ---
- drivers/gpio/gpio-sch.c |  749 ++++++++++++++++++++++++++++++++++++++++-------
- 1 files changed, 638 insertions(+), 111 deletions(-)
+ drivers/gpio/gpio-sch.c | 783 +++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 672 insertions(+), 111 deletions(-)
 
 diff --git a/drivers/gpio/gpio-sch.c b/drivers/gpio/gpio-sch.c
-index edae963..faabd97 100644
+index edae963..a2b5bdc 100644
 --- a/drivers/gpio/gpio-sch.c
 +++ b/drivers/gpio/gpio-sch.c
-@@ -28,6 +28,8 @@
+@@ -26,8 +26,11 @@
+ #include <linux/acpi.h>
+ #include <linux/platform_device.h>
  #include <linux/pci_ids.h>
++#include <linux/uio_driver.h>
  
  #include <linux/gpio.h>
 +#include <linux/interrupt.h>
@@ -20,7 +23,7 @@ index edae963..faabd97 100644
  
  static DEFINE_SPINLOCK(gpio_lock);
  
-@@ -35,83 +37,168 @@ static DEFINE_SPINLOCK(gpio_lock);
+@@ -35,83 +38,170 @@ static DEFINE_SPINLOCK(gpio_lock);
  #define CGIO	(0x04)
  #define CGLV	(0x08)
  
@@ -48,6 +51,8 @@ index edae963..faabd97 100644
 +#define RESOURCE_IRQ	9
 +
 +static unsigned long gpio_ba;
++
++static struct uio_info *info;
 +
 +static int irq_num;
 +
@@ -223,7 +228,7 @@ index edae963..faabd97 100644
  static struct gpio_chip sch_gpio_core = {
  	.label			= "sch_gpio_core",
  	.owner			= THIS_MODULE,
-@@ -119,63 +206,198 @@ static struct gpio_chip sch_gpio_core = {
+@@ -119,63 +209,198 @@ static struct gpio_chip sch_gpio_core = {
  	.get			= sch_gpio_core_get,
  	.direction_output	= sch_gpio_core_direction_out,
  	.set			= sch_gpio_core_set,
@@ -236,29 +241,29 @@ index edae963..faabd97 100644
  {
 -	u8 curr_dirs;
 +	u32 gpio_num = 0;
- 
--	spin_lock(&gpio_lock);
++
 +	gpio_num = d->irq - chip_ptr->irq_base_core;
 +	sch_gpio_reg_set_if_clear(CGGPE, gpio_num);
 +}
  
--	curr_dirs = inb(gpio_ba + RGIO);
+-	spin_lock(&gpio_lock);
 +static void sch_gpio_core_irq_disable(struct irq_data *d)
 +{
 +	u32 gpio_num = 0;
  
--	if (!(curr_dirs & (1 << gpio_num)))
--		outb(curr_dirs | (1 << gpio_num) , gpio_ba + RGIO);
+-	curr_dirs = inb(gpio_ba + RGIO);
 +	gpio_num = d->irq - chip_ptr->irq_base_core;
 +	sch_gpio_reg_clear_if_set(CGGPE, gpio_num);
 +}
  
--	spin_unlock(&gpio_lock);
--	return 0;
+-	if (!(curr_dirs & (1 << gpio_num)))
+-		outb(curr_dirs | (1 << gpio_num) , gpio_ba + RGIO);
 +static void sch_gpio_core_irq_ack(struct irq_data *d)
 +{
 +	u32 gpio_num = 0;
-+
+ 
+-	spin_unlock(&gpio_lock);
+-	return 0;
 +	gpio_num = d->irq - chip_ptr->irq_base_core;
 +	sch_gpio_reg_set(CGTS, gpio_num, 1);
  }
@@ -305,8 +310,10 @@ index edae963..faabd97 100644
 +	spin_unlock_irqrestore(&gpio_lock, flags);
 +
 +	return ret;
-+}
-+
+ }
+ 
+-static void sch_gpio_resume_set(struct gpio_chip *gc,
+-				unsigned gpio_num, int val)
 +static struct irq_chip sch_irq_core = {
 +	.irq_ack		= sch_gpio_core_irq_ack,
 +	.irq_set_type		= sch_gpio_core_irq_type,
@@ -315,7 +322,8 @@ index edae963..faabd97 100644
 +};
 +
 +static void sch_gpio_core_irqs_init(struct sch_gpio *chip, unsigned int num)
-+{
+ {
+-	u8 curr_vals;
 +	int i;
 +
 +	for (i = 0; i < num; i++) {
@@ -325,16 +333,14 @@ index edae963..faabd97 100644
 +						handle_simple_irq,
 +						"sch_gpio_irq_core");
 +	}
- }
- 
--static void sch_gpio_resume_set(struct gpio_chip *gc,
--				unsigned gpio_num, int val)
-+static void sch_gpio_core_irqs_deinit(struct sch_gpio *chip, unsigned int num)
- {
--	u8 curr_vals;
-+	int i;
++}
  
 -	spin_lock(&gpio_lock);
++static void sch_gpio_core_irqs_deinit(struct sch_gpio *chip, unsigned int num)
++{
++	int i;
+ 
+-	curr_vals = inb(gpio_ba + RGLV);
 +	for (i = 0; i < num; i++) {
 +		irq_set_chip_data(i + chip->irq_base_core, 0);
 +		irq_set_chip_and_handler_name(i + chip->irq_base_core,
@@ -342,7 +348,10 @@ index edae963..faabd97 100644
 +	}
 +}
  
--	curr_vals = inb(gpio_ba + RGLV);
+-	if (val)
+-		outb(curr_vals | (1 << gpio_num), gpio_ba + RGLV);
+-	else
+-		outb((curr_vals & ~(1 << gpio_num)), gpio_ba + RGLV);
 +static void sch_gpio_core_irq_disable_all(struct sch_gpio *chip,
 +						unsigned int num)
 +{
@@ -360,11 +369,7 @@ index edae963..faabd97 100644
 +		/* clear any pending interrupt */
 +		sch_gpio_reg_set(CGTS, gpio_num, 1);
 +	}
- 
--	if (val)
--		outb(curr_vals | (1 << gpio_num), gpio_ba + RGLV);
--	else
--		outb((curr_vals & ~(1 << gpio_num)), gpio_ba + RGLV);
++
 +	spin_unlock_irqrestore(&gpio_lock, flags);
  
 -	spin_unlock(&gpio_lock);
@@ -387,26 +392,26 @@ index edae963..faabd97 100644
 -	sch_gpio_resume_set(gc, gpio_num, val);
 +	spin_unlock_irqrestore(&gpio_lock, flags);
 +}
- 
--	spin_lock(&gpio_lock);
++
 +void sch_gpio_core_restore_state(struct sch_gpio_core_int_regvals *regs)
 +{
 +	unsigned long flags = 0;
 +	spin_lock_irqsave(&gpio_lock, flags);
  
--	curr_dirs = inb(gpio_ba + RGIO);
--	if (curr_dirs & (1 << gpio_num))
--		outb(curr_dirs & ~(1 << gpio_num), gpio_ba + RGIO);
+-	spin_lock(&gpio_lock);
 +	outb(regs->cgtpe, gpio_ba + CGTPE);
 +	outb(regs->cgtne, gpio_ba + CGTNE);
 +	outb(regs->cggpe, gpio_ba + CGGPE);
 +	outb(regs->cgsmi, gpio_ba + CGSMI);
 +	outb(regs->cgnmien, gpio_ba + CGNMIEN);
  
--	spin_unlock(&gpio_lock);
+-	curr_dirs = inb(gpio_ba + RGIO);
+-	if (curr_dirs & (1 << gpio_num))
+-		outb(curr_dirs & ~(1 << gpio_num), gpio_ba + RGIO);
 +	spin_unlock_irqrestore(&gpio_lock, flags);
 +}
-+
+ 
+-	spin_unlock(&gpio_lock);
 +static int sch_gpio_resume_direction_in(struct gpio_chip *gc,
 +					unsigned gpio_num)
 +{
@@ -414,9 +419,9 @@ index edae963..faabd97 100644
 +	spin_lock_irqsave(&gpio_lock, flags);
 +	sch_gpio_reg_set_if_clear(RGIO, gpio_num);
 +	spin_unlock_irqrestore(&gpio_lock, flags);
- 	return 0;
- }
- 
++	return 0;
++}
++
 +static int sch_gpio_resume_get(struct gpio_chip *gc, unsigned gpio_num)
 +{
 +	int res;
@@ -441,9 +446,9 @@ index edae963..faabd97 100644
 +	spin_lock_irqsave(&gpio_lock, flags);
 +	sch_gpio_reg_clear_if_set(RGIO, gpio_num);
 +	spin_unlock_irqrestore(&gpio_lock, flags);
-+	return 0;
-+}
-+
+ 	return 0;
+ }
+ 
 +static int sch_gpio_resume_to_irq(struct gpio_chip *gc, unsigned offset)
 +{
 +	return chip_ptr->irq_base_resume + offset;
@@ -452,13 +457,13 @@ index edae963..faabd97 100644
  static struct gpio_chip sch_gpio_resume = {
  	.label			= "sch_gpio_resume",
  	.owner			= THIS_MODULE,
-@@ -183,13 +405,203 @@ static struct gpio_chip sch_gpio_resume = {
+@@ -183,17 +408,212 @@ static struct gpio_chip sch_gpio_resume = {
  	.get			= sch_gpio_resume_get,
  	.direction_output	= sch_gpio_resume_direction_out,
  	.set			= sch_gpio_resume_set,
 +	.to_irq			= sch_gpio_resume_to_irq,
-+};
-+
+ };
+ 
 +static void sch_gpio_resume_irq_enable(struct irq_data *d)
 +{
 +	u32 gpio_num = 0;
@@ -530,8 +535,8 @@ index edae963..faabd97 100644
 +	.irq_set_type		= sch_gpio_resume_irq_type,
 +	.irq_enable		= sch_gpio_resume_irq_enable,
 +	.irq_disable		= sch_gpio_resume_irq_disable,
- };
- 
++};
++
 +static void sch_gpio_resume_irqs_init(struct sch_gpio *chip, unsigned int num)
 +{
 +	int i;
@@ -656,7 +661,16 @@ index edae963..faabd97 100644
  	id = pdev->id;
  	if (!id)
  		return -ENODEV;
-@@ -203,46 +615,56 @@ static int sch_gpio_probe(struct platform_device *pdev)
+ 
++	/* Get UIO memory */
++	info = kzalloc(sizeof(struct uio_info), GFP_KERNEL);
++	if (!info)
++		return -ENOMEM;
++
+ 	res = platform_get_resource(pdev, IORESOURCE_IO, 0);
+ 	if (!res)
+ 		return -EBUSY;
+@@ -203,46 +623,56 @@ static int sch_gpio_probe(struct platform_device *pdev)
  
  	gpio_ba = res->start;
  
@@ -752,7 +766,7 @@ index edae963..faabd97 100644
  	}
  
  	sch_gpio_core.dev = &pdev->dev;
-@@ -256,44 +678,147 @@ static int sch_gpio_probe(struct platform_device *pdev)
+@@ -256,44 +686,173 @@ static int sch_gpio_probe(struct platform_device *pdev)
  	if (err < 0)
  		goto err_sch_gpio_resume;
  
@@ -796,8 +810,26 @@ index edae963..faabd97 100644
 +	sch_gpio_core_irqs_init(chip, sch_gpio_core.ngpio);
 +	sch_gpio_resume_irqs_init(chip, sch_gpio_resume.ngpio);
 +
++	/* UIO */
++	info->port[0].name = "gpio_regs";
++	info->port[0].start = res->start;
++	info->port[0].size = resource_size(res);
++	info->port[0].porttype = UIO_PORT_X86;
++	info->name = "sch_gpio";
++	info->version = "0.0.1";
++
++	if (uio_register_device(&pdev->dev, info))
++		goto err_sch_uio_register;
++
++	pr_info("%s UIO port addr 0x%04x size %lu porttype %d\n",
++		__func__, (unsigned int)info->port[0].start,
++		info->port[0].size, info->port[0].porttype);
++
  	return 0;
  
++err_sch_uio_register:
++	free_irq(irq_num, chip);
++
 +err_sch_request_irq:
 +	platform_device_unregister(&qrk_gpio_restrict_pdev);
 +
@@ -830,6 +862,9 @@ index edae963..faabd97 100644
 +	kfree(chip);
 +	chip_ptr = 0;
 +
++	if (info != NULL)
++		kfree(info);
++
  	return err;
  }
  
@@ -844,6 +879,11 @@ index edae963..faabd97 100644
 -		int err;
  
 -		err  = gpiochip_remove(&sch_gpio_core);
++		if (info != NULL) {
++			uio_unregister_device(info);
++			kfree(info);
++		}
++
 +		sch_gpio_resume_irqs_deinit(chip, sch_gpio_resume.ngpio);
 +		sch_gpio_core_irqs_deinit(chip, sch_gpio_core.ngpio);
 +
@@ -908,7 +948,7 @@ index edae963..faabd97 100644
  	return 0;
  }
  
-@@ -304,6 +829,8 @@ static struct platform_driver sch_gpio_driver = {
+@@ -304,6 +863,8 @@ static struct platform_driver sch_gpio_driver = {
  	},
  	.probe		= sch_gpio_probe,
  	.remove		= sch_gpio_remove,
@@ -917,6 +957,3 @@ index edae963..faabd97 100644
  };
  
  module_platform_driver(sch_gpio_driver);
--- 
-1.7.4.1
-

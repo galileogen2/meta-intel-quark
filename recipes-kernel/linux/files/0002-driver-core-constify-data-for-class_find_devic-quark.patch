@@ -23,25 +23,25 @@ Acked-by: Grant Likely <grant.likely@secretlab.ca>
 Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 (cherry picked from commit 9f3b795a626ee79574595e06d1437fe0c7d51d29)
 ---
- drivers/base/class.c                |    4 ++--
- drivers/base/core.c                 |    4 ++--
- drivers/gpio/gpiolib.c              |    2 +-
- drivers/isdn/mISDN/core.c           |    4 ++--
- drivers/net/phy/mdio_bus.c          |    2 +-
- drivers/power/power_supply_core.c   |    4 ++--
- drivers/rtc/interface.c             |    6 +++---
- drivers/scsi/hosts.c                |    4 ++--
- drivers/scsi/osd/osd_uld.c          |   26 +++++++++-----------------
- drivers/scsi/scsi_transport_iscsi.c |    4 ++--
- drivers/spi/spi.c                   |    4 ++--
- drivers/uwb/lc-rc.c                 |   21 ++++++++++-----------
- include/linux/device.h              |    4 ++--
- include/linux/power_supply.h        |    2 +-
- include/linux/rtc.h                 |    2 +-
- init/do_mounts.c                    |    4 ++--
- kernel/power/suspend_test.c         |   11 +++++------
- net/ieee802154/wpan-class.c         |    5 ++---
- net/nfc/core.c                      |    4 ++--
+ drivers/base/class.c                |  4 ++--
+ drivers/base/core.c                 |  4 ++--
+ drivers/gpio/gpiolib.c              |  2 +-
+ drivers/isdn/mISDN/core.c           |  4 ++--
+ drivers/net/phy/mdio_bus.c          |  2 +-
+ drivers/power/power_supply_core.c   |  4 ++--
+ drivers/rtc/interface.c             |  6 +++---
+ drivers/scsi/hosts.c                |  4 ++--
+ drivers/scsi/osd/osd_uld.c          | 26 +++++++++-----------------
+ drivers/scsi/scsi_transport_iscsi.c |  4 ++--
+ drivers/spi/spi.c                   |  4 ++--
+ drivers/uwb/lc-rc.c                 | 21 ++++++++++-----------
+ include/linux/device.h              |  4 ++--
+ include/linux/power_supply.h        |  2 +-
+ include/linux/rtc.h                 |  2 +-
+ init/do_mounts.c                    |  4 ++--
+ kernel/power/suspend_test.c         | 11 +++++------
+ net/ieee802154/wpan-class.c         |  5 ++---
+ net/nfc/core.c                      |  4 ++--
  19 files changed, 53 insertions(+), 64 deletions(-)
 
 diff --git a/drivers/base/class.c b/drivers/base/class.c
@@ -490,6 +490,3 @@ index aa64ea4..0f4a6de 100644
  
  	return dev->idx == *idx;
  }
--- 
-1.7.4.1
-

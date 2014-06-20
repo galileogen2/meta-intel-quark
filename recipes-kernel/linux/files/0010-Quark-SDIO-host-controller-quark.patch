@@ -4,9 +4,9 @@ Date: Thu, 20 Feb 2014 15:16:30 +0000
 Subject: [PATCH 10/21] Quark SDIO host controller
 
 ---
- drivers/mmc/host/sdhci-pci.c |   12 ++++++++++++
- include/linux/pci_ids.h      |    2 ++
- 2 files changed, 14 insertions(+), 0 deletions(-)
+ drivers/mmc/host/sdhci-pci.c | 12 ++++++++++++
+ include/linux/pci_ids.h      |  2 ++
+ 2 files changed, 14 insertions(+)
 
 diff --git a/drivers/mmc/host/sdhci-pci.c b/drivers/mmc/host/sdhci-pci.c
 index c7dd0cb..e5759b7 100644
@@ -58,6 +58,3 @@ index 0eb6579..b5bb350 100644
  #define PCI_DEVICE_ID_INTEL_COUGARPOINT_LPC_MIN	0x1c41
  #define PCI_DEVICE_ID_INTEL_COUGARPOINT_LPC_MAX	0x1c5f
  #define PCI_DEVICE_ID_INTEL_PATSBURG_LPC_0	0x1d40
--- 
-1.7.4.1
-

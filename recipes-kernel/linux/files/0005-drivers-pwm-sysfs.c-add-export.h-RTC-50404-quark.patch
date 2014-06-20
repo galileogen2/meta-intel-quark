@@ -6,8 +6,8 @@ Subject: [PATCH 05/21] drivers/pwm/sysfs.c: add export.h - RTC #50404
 Resolve THIS_MODULE macro.
 (cherry picked from commit b594e3ef2c9f7a2c61188e76a1c228f1d30556eb)
 ---
- drivers/pwm/sysfs.c |    1 +
- 1 files changed, 1 insertions(+), 0 deletions(-)
+ drivers/pwm/sysfs.c | 1 +
+ 1 file changed, 1 insertion(+)
 
 diff --git a/drivers/pwm/sysfs.c b/drivers/pwm/sysfs.c
 index 8ca5de3..4cd6d78 100644
@@ -21,6 +21,3 @@ index 8ca5de3..4cd6d78 100644
  #include <linux/device.h>
  #include <linux/mutex.h>
  #include <linux/err.h>
--- 
-1.7.4.1
-

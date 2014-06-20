@@ -1,7 +1,8 @@
 From xxxx Mon Sep 17 00:00:00 2001
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 Date: Wed, 6 Feb 2013 15:59:18 -0800
-Subject: [PATCH 03/21] TTY: mark tty_get_device call with the proper const values
+Subject: [PATCH 03/21] TTY: mark tty_get_device call with the proper const
+ values
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -14,8 +15,8 @@ Cc: Michał Mirosław <mirq-linux@rere.qmqm.pl>
 Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 (cherry picked from commit 6e9430ac57e8c1f41ab24ef7fbb3d452c7eb7246)
 ---
- drivers/tty/tty_io.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ drivers/tty/tty_io.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/tty/tty_io.c b/drivers/tty/tty_io.c
 index da9fde8..6b20fd6 100644
@@ -33,6 +34,3 @@ index da9fde8..6b20fd6 100644
  	return dev->devt == *devt;
  }
  
--- 
-1.7.4.1
-

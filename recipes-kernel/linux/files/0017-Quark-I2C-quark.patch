@@ -4,10 +4,10 @@ Date: Tue, 13 Aug 2013 10:22:38 +0100
 Subject: [PATCH 17/21] Quark I2C
 
 ---
- drivers/i2c/busses/Kconfig                 |   19 +++---
- drivers/i2c/busses/i2c-designware-core.c   |   99 ++++++++++++++++++++++++++--
- drivers/i2c/busses/i2c-designware-core.h   |   12 ++++
- drivers/i2c/busses/i2c-designware-pcidrv.c |   18 +++--
+ drivers/i2c/busses/Kconfig                 | 19 +++---
+ drivers/i2c/busses/i2c-designware-core.c   | 99 +++++++++++++++++++++++++++---
+ drivers/i2c/busses/i2c-designware-core.h   | 12 ++++
+ drivers/i2c/busses/i2c-designware-pcidrv.c | 18 +++---
  4 files changed, 123 insertions(+), 25 deletions(-)
 
 diff --git a/drivers/i2c/busses/Kconfig b/drivers/i2c/busses/Kconfig
@@ -412,6 +412,3 @@ index 6add851..62ad7dc 100644
  	r = i2c_dw_init(dev);
  	if (r)
  		goto err_iounmap;
--- 
-1.7.4.1
-

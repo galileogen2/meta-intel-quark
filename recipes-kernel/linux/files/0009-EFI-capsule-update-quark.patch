@@ -4,10 +4,10 @@ Date: Mon, 24 Feb 2014 18:41:59 +0000
 Subject: [PATCH 09/21] EFI capsule update
 
 ---
- arch/x86/platform/efi/Makefile             |    3 +-
- arch/x86/platform/efi/efi.c                |   12 +-
- arch/x86/platform/efi/efi_capsule_update.c |  331 ++++++++++++++++++++++++++++
- 3 files changed, 342 insertions(+), 4 deletions(-)
+ arch/x86/platform/efi/Makefile             |   3 +-
+ arch/x86/platform/efi/efi.c                |  12 +-
+ arch/x86/platform/efi/efi_capsule_update.c | 324 +++++++++++++++++++++++++++++
+ 3 files changed, 335 insertions(+), 4 deletions(-)
  create mode 100644 arch/x86/platform/efi/efi_capsule_update.c
 
 diff --git a/arch/x86/platform/efi/Makefile b/arch/x86/platform/efi/Makefile
@@ -58,28 +58,21 @@ index e2cd38f..0e22b5f4 100644
  		size = md->num_pages << EFI_PAGE_SHIFT;
 diff --git a/arch/x86/platform/efi/efi_capsule_update.c b/arch/x86/platform/efi/efi_capsule_update.c
 new file mode 100644
-index 0000000..3420e35
+index 0000000..c380392
 --- /dev/null
 +++ b/arch/x86/platform/efi/efi_capsule_update.c
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,324 @@
 +/*
 + * Copyright(c) 2013 Intel Corporation.
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of version 2 of the GNU General Public License as
-+ * published by the Free Software Foundation.
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
 + *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-+ *
-+ * Contact Information:
-+ * Intel Corporation
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
 + */
 +#define DEBUG
 +#include <asm/qrk.h>
@@ -393,6 +386,3 @@ index 0000000..3420e35
 +
 +module_init(efi_capsule_update_init);
 +module_exit(efi_capsule_update_exit);
--- 
-1.7.4.1
-

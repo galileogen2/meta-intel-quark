@@ -4,10 +4,10 @@ Date: Thu, 13 Feb 2014 16:41:02 +0000
 Subject: [PATCH 19/21] Quark SC SPI
 
 ---
- drivers/spi/Kconfig            |   39 ++-
+ drivers/spi/Kconfig            |   39 +-
  drivers/spi/Makefile           |    1 +
  drivers/spi/spi-gpio.c         |    2 +-
- drivers/spi/spi-pxa2xx-pci.c   |  129 ++++-
+ drivers/spi/spi-pxa2xx-pci.c   |  129 +++-
  drivers/spi/spi-pxa2xx.c       | 1290 +++++++++++++++++++++++++++-------------
  include/linux/pxa2xx_ssp.h     |   25 +
  include/linux/spi/pxa2xx_spi.h |   15 +-
@@ -2344,6 +2344,3 @@ index f629189..307d218 100644
  #define	SPI_LSB_FIRST	0x08			/* per-word bits-on-wire */
  #define	SPI_3WIRE	0x10			/* SI/SO signals shared */
  #define	SPI_LOOP	0x20			/* loopback mode */
--- 
-1.7.4.1
-

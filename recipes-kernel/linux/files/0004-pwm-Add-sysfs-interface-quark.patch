@@ -26,13 +26,13 @@ Cc: Rob Landley <rob@landley.net>
 Signed-off-by: Thierry Reding <thierry.reding@gmail.com>
 (cherry picked from commit 76abbdde2d95a3807d0dc6bf9f84d03d0dbd4f3d)
 ---
- Documentation/ABI/testing/sysfs-class-pwm |   79 +++++++
- Documentation/pwm.txt                     |   37 +++
- drivers/pwm/Kconfig                       |    4 +
- drivers/pwm/Makefile                      |    1 +
- drivers/pwm/core.c                        |   25 ++-
- drivers/pwm/sysfs.c                       |  352 +++++++++++++++++++++++++++++
- include/linux/pwm.h                       |   29 +++-
+ Documentation/ABI/testing/sysfs-class-pwm |  79 +++++++
+ Documentation/pwm.txt                     |  37 ++++
+ drivers/pwm/Kconfig                       |   4 +
+ drivers/pwm/Makefile                      |   1 +
+ drivers/pwm/core.c                        |  25 ++-
+ drivers/pwm/sysfs.c                       | 352 ++++++++++++++++++++++++++++++
+ include/linux/pwm.h                       |  29 ++-
  7 files changed, 524 insertions(+), 3 deletions(-)
  create mode 100644 Documentation/ABI/testing/sysfs-class-pwm
  create mode 100644 drivers/pwm/sysfs.c
@@ -679,6 +679,3 @@ index 6d661f3..6842d11 100644
 +#endif /* CONFIG_PWM_SYSFS */
 +
  #endif /* __LINUX_PWM_H */
--- 
-1.7.4.1
-

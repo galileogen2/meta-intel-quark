@@ -107,8 +107,8 @@ Signed-off-by: Sebastian Andrzej Siewior <bigeasy@linutronix.de>
 Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 (cherry picked from commit 852e4a8152b427c3f318bb0e1b5e938d64dcdc32)
 ---
- drivers/tty/tty_ldisc.c |   10 +++++-----
- 1 files changed, 5 insertions(+), 5 deletions(-)
+ drivers/tty/tty_ldisc.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/tty/tty_ldisc.c b/drivers/tty/tty_ldisc.c
 index c578229..78f1be2 100644
@@ -137,6 +137,3 @@ index c578229..78f1be2 100644
  	if (o_tty)
  		tty_ldisc_kill(o_tty);
  
--- 
-1.7.4.1
-

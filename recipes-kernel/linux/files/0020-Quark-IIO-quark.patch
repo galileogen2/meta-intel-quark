@@ -1,21 +1,25 @@
 From xxxx Mon Sep 17 00:00:00 2001
 From: Dan O'Donovan <dan.odonovan@emutex.com>
-Date: Fri, 14 Feb 2014 14:10:33 +0000
+Date: Wed, 9 Apr 2014 15:34:37 +0100
 Subject: [PATCH 20/21] Quark IIO
 
 ---
  drivers/iio/adc/ad7298.c                       |   20 +-
- drivers/staging/iio/adc/Kconfig                |   13 +
- drivers/staging/iio/adc/Makefile               |    1 +
- drivers/staging/iio/adc/max78m6610_lmu.c       | 2235 ++++++++++++++++++++++++
+ drivers/staging/iio/adc/Kconfig                |   24 +
+ drivers/staging/iio/adc/Makefile               |    2 +
+ drivers/staging/iio/adc/adc1x8s102.c           |  387 ++++
+ drivers/staging/iio/adc/max78m6610_lmu.c       | 2575 ++++++++++++++++++++++++
  drivers/staging/iio/trigger/Kconfig            |   11 +
  drivers/staging/iio/trigger/Makefile           |    1 +
  drivers/staging/iio/trigger/iio-trig-hrtimer.c |  288 +++
  include/linux/platform_data/ad7298.h           |    5 +
- include/linux/platform_data/max78m6610_lmu.h   |   34 +
- 9 files changed, 2603 insertions(+), 5 deletions(-)
+ include/linux/platform_data/adc1x8s102.h       |   30 +
+ include/linux/platform_data/max78m6610_lmu.h   |   27 +
+ 11 files changed, 3365 insertions(+), 5 deletions(-)
+ create mode 100644 drivers/staging/iio/adc/adc1x8s102.c
  create mode 100644 drivers/staging/iio/adc/max78m6610_lmu.c
  create mode 100644 drivers/staging/iio/trigger/iio-trig-hrtimer.c
+ create mode 100644 include/linux/platform_data/adc1x8s102.h
  create mode 100644 include/linux/platform_data/max78m6610_lmu.h
 
 diff --git a/drivers/iio/adc/ad7298.c b/drivers/iio/adc/ad7298.c
@@ -78,10 +82,10 @@ index b34d754..60491e4 100644
  	if (st->ext_ref) {
  		st->reg = regulator_get(&spi->dev, "vref");
 diff --git a/drivers/staging/iio/adc/Kconfig b/drivers/staging/iio/adc/Kconfig
-index fb8c239..1309fac 100644
+index fb8c239..d9fef7a 100644
 --- a/drivers/staging/iio/adc/Kconfig
 +++ b/drivers/staging/iio/adc/Kconfig
-@@ -137,4 +137,17 @@ config SPEAR_ADC
+@@ -137,4 +137,28 @@ config SPEAR_ADC
  	  Say yes here to build support for the integrated ADC inside the
  	  ST SPEAr SoC. Provides direct access via sysfs.
  
@@ -97,43 +101,441 @@ index fb8c239..1309fac 100644
 +	  To compile this driver as a module, choose M here: the
 +	  module will be called max78m6610_lmu.
 +
++config ADC1x8S102
++	tristate "Texas Instruments ADC1x8S102 driver"
++	depends on SPI
++	select IIO_BUFFER
++	select IIO_TRIGGERED_BUFFER
++	help
++	  Say yes here to build support for Texas Instruments ADC1x8S102 ADC.
++	  Provides direct access via sysfs.
++
++	  To compile this driver as a module, choose M here: the module will
++	  be called adc1x8s102
 +
  endmenu
 diff --git a/drivers/staging/iio/adc/Makefile b/drivers/staging/iio/adc/Makefile
-index d285596..2c4e7e1 100644
+index d285596..5a2f486 100644
 --- a/drivers/staging/iio/adc/Makefile
 +++ b/drivers/staging/iio/adc/Makefile
-@@ -21,3 +21,4 @@ obj-$(CONFIG_AD7280) += ad7280a.o
+@@ -21,3 +21,5 @@ obj-$(CONFIG_AD7280) += ad7280a.o
  obj-$(CONFIG_LPC32XX_ADC) += lpc32xx_adc.o
  obj-$(CONFIG_MXS_LRADC) += mxs-lradc.o
  obj-$(CONFIG_SPEAR_ADC) += spear_adc.o
 +obj-$(CONFIG_MAX78M6610_LMU) += max78m6610_lmu.o
++obj-$(CONFIG_ADC1x8S102) += adc1x8s102.o
+diff --git a/drivers/staging/iio/adc/adc1x8s102.c b/drivers/staging/iio/adc/adc1x8s102.c
+new file mode 100644
+index 0000000..b4de3a9
+--- /dev/null
++++ b/drivers/staging/iio/adc/adc1x8s102.c
+@@ -0,0 +1,387 @@
++/*
++ * ADC1x8S102 SPI ADC driver
++ *
++ * Copyright(c) 2013 Intel Corporation.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ *
++ * This IIO device driver is is designed to work with the following
++ * analog to digital converters from Texas Instruments:
++ *  ADC108S102
++ *  ADC128S102
++ * The communication with ADC chip is via the SPI bus (mode 3).
++ */
++
++
++#include <linux/iio/iio.h>
++#include <linux/iio/buffer.h>
++#include <linux/iio/types.h>
++#include <linux/iio/triggered_buffer.h>
++#include <linux/iio/trigger_consumer.h>
++
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/spi/spi.h>
++
++#include <linux/platform_data/adc1x8s102.h>
++#include <linux/regulator/consumer.h>
++
++/*
++ * Defining the ADC resolution being 12 bits, we can use the same driver for
++ * both ADC108S102 (10 bits resolution) and ADC128S102 (12 bits resolution)
++ * chips. The ADC108S102 effectively returns a 12-bit result with the 2
++ * least-significant bits unset.
++ */
++#define ADC1x8S102_BITS		12
++#define ADC1x8S102_MAX_CHANNELS	8
++
++/* 16-bit SPI command format:
++ *   [15:14] Ignored
++ *   [13:11] 3-bit channel address
++ *   [10:0]  Ignored
++ */
++#define ADC1x8S102_CMD(ch)		(((ch) << (8)) << (3))
++
++/*
++ * 16-bit SPI response format:
++ *   [15:12] Zeros
++ *   [11:0]  12-bit ADC sample (for ADC108S102, [1:0] will always be 0).
++ */
++#define ADC1x8S102_RES_DATA(res)	(res & ((1 << ADC1x8S102_BITS) - 1))
++
++struct adc1x8s102_state {
++	struct spi_device		*spi;
++	struct regulator		*reg;
++	u16				ext_vin;
++	/* SPI transfer used by triggered buffer handler*/
++	struct spi_transfer		ring_xfer;
++	/* SPI transfer used by direct scan */
++	struct spi_transfer		scan_single_xfer;
++	/* SPI message used by ring_xfer SPI transfer */
++	struct spi_message		ring_msg;
++	/* SPI message used by scan_single_xfer SPI transfer */
++	struct spi_message		scan_single_msg;
++
++	/* SPI message buffers:
++	 *  tx_buf: |C0|C1|C2|C3|C4|C5|C6|C7|XX|
++	 *  rx_buf: |XX|R0|R1|R2|R3|R4|R5|R6|R7|tt|tt|tt|tt|
++	 *
++	 *  tx_buf: 8 channel read commands, plus 1 dummy command
++	 *  rx_buf: 1 dummy response, 8 channel responses, plus 64-bit timestamp
++	 */
++	__be16				rx_buf[13] ____cacheline_aligned;
++	__be16				tx_buf[9];
++
++};
++
++#define ADC1X8S102_V_CHAN(index)					\
++	{								\
++		.type = IIO_VOLTAGE,					\
++		.indexed = 1,						\
++		.channel = index,					\
++		.info_mask = IIO_CHAN_INFO_RAW_SEPARATE_BIT |		\
++			IIO_CHAN_INFO_SCALE_SEPARATE_BIT,		\
++		.address = index,					\
++		.scan_index = index,					\
++		.scan_type = {						\
++			.sign = 'u',					\
++			.realbits = ADC1x8S102_BITS,			\
++			.storagebits = 16,				\
++			.endianness = IIO_BE,				\
++		},							\
++	}
++
++static const struct iio_chan_spec adc1x8s102_channels[] = {
++	ADC1X8S102_V_CHAN(0),
++	ADC1X8S102_V_CHAN(1),
++	ADC1X8S102_V_CHAN(2),
++	ADC1X8S102_V_CHAN(3),
++	ADC1X8S102_V_CHAN(4),
++	ADC1X8S102_V_CHAN(5),
++	ADC1X8S102_V_CHAN(6),
++	ADC1X8S102_V_CHAN(7),
++	IIO_CHAN_SOFT_TIMESTAMP(8),
++};
++
++
++static int adc1x8s102_update_scan_mode(struct iio_dev *indio_dev,
++		unsigned long const *active_scan_mask)
++{
++	struct adc1x8s102_state *st;
++	int i, j;
++
++	st = iio_priv(indio_dev);
++
++	/* Fill in the first x shorts of tx_buf with the number of channels
++	 * enabled for sampling by the triggered buffer
++	 */
++	for (i = 0, j = 0; i < ADC1x8S102_MAX_CHANNELS; i++) {
++		if (test_bit(i, active_scan_mask)) {
++			st->tx_buf[j] = cpu_to_be16(ADC1x8S102_CMD(i));
++			j++;
++		}
++	}
++	/* One dummy command added, to clock in the last response */
++	st->tx_buf[j] = 0x00;
++
++	/* build SPI ring message */
++	st->ring_xfer.tx_buf = &st->tx_buf[0];
++	st->ring_xfer.rx_buf = &st->rx_buf[0];
++	st->ring_xfer.len = (j + 1) * sizeof(__be16);
++
++	spi_message_init(&st->ring_msg);
++	spi_message_add_tail(&st->ring_xfer, &st->ring_msg);
++
++	return 0;
++}
++
++
++static irqreturn_t adc1x8s102_trigger_handler(int irq, void *p)
++{
++	struct iio_poll_func *pf = p;
++	struct iio_dev *indio_dev;
++	struct adc1x8s102_state *st;
++	s64 time_ns = 0;
++	int b_sent;
++
++	indio_dev = pf->indio_dev;
++	st = iio_priv(indio_dev);
++
++	b_sent = spi_sync(st->spi, &st->ring_msg);
++	if (b_sent)
++		goto done;
++	if (indio_dev->scan_timestamp) {
++		time_ns = iio_get_time_ns();
++		memcpy((u8 *)st->rx_buf + st->ring_xfer.len, &time_ns,
++				sizeof(time_ns));
++	}
++
++	/* Skip the dummy response in the first slot */
++	iio_push_to_buffers(indio_dev, (u8 *)&st->rx_buf[1]);
++done:
++	iio_trigger_notify_done(indio_dev->trig);
++
++	return IRQ_HANDLED;
++}
++
++
++/*
++ * returns:
++ * positive (>=0)  value => SUCCESS
++ * negative value => FAILURE
++ */
++static int adc1x8s102_scan_direct(struct adc1x8s102_state *st, unsigned ch)
++{
++	int ret;
++
++	if (ch >= ADC1x8S102_MAX_CHANNELS) {
++		dev_err(&st->spi->dev, "AD channel number too big: %u\n", ch);
++		return -1;
++	}
++
++	st->tx_buf[0] = cpu_to_be16(ADC1x8S102_CMD(ch));
++	ret = spi_sync(st->spi, &st->scan_single_msg);
++	if (ret)
++		return ret;
++
++	/* Skip the dummy response in the first slot */
++	return be16_to_cpu(st->rx_buf[1]);
++}
++
++
++/*
++ * returns:
++ * positive (>=0)  value => SUCCESS
++ * negative value => FAILURE
++ */
++static int adc1x8s102_read_raw(struct iio_dev *indio_dev,
++			   struct iio_chan_spec const *chan,
++			   int *val,
++			   int *val2,
++			   long m)
++{
++	int ret;
++	struct adc1x8s102_state *st;
++
++	st = iio_priv(indio_dev);
++
++	switch (m) {
++	case IIO_CHAN_INFO_RAW:
++		mutex_lock(&indio_dev->mlock);
++		if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
++			ret = -EBUSY;
++			dev_warn(&st->spi->dev,
++			 "indio_dev->currentmode is INDIO_BUFFER_TRIGGERED\n");
++		} else {
++			ret = adc1x8s102_scan_direct(st, chan->address);
++		}
++		mutex_unlock(&indio_dev->mlock);
++
++		if (ret < 0)
++			return ret;
++		*val = ADC1x8S102_RES_DATA(ret);
++
++		return IIO_VAL_INT;
++	case IIO_CHAN_INFO_SCALE:
++		switch (chan->type) {
++		case IIO_VOLTAGE:
++			if (NULL != st->reg)
++				*val = regulator_get_voltage(st->reg) / 1000;
++			else
++				*val = st->ext_vin;
++
++			*val2 = chan->scan_type.realbits;
++			return IIO_VAL_FRACTIONAL_LOG2;
++		default:
++			dev_warn(&st->spi->dev,
++				 "Invalid channel type %u for channel %d\n",
++				 chan->type, chan->channel);
++			return -EINVAL;
++		}
++	default:
++		dev_warn(&st->spi->dev, "Invalid IIO_CHAN_INFO: %lu\n", m);
++		return -EINVAL;
++	}
++}
++
++
++
++static const struct iio_info adc1x8s102_info = {
++	.read_raw		= &adc1x8s102_read_raw,
++	.update_scan_mode	= &adc1x8s102_update_scan_mode,
++	.driver_module		= THIS_MODULE,
++};
++
++
++static int adc1x8s102_probe(struct spi_device *spi)
++{
++	struct adc1x8s102_platform_data *pdata = spi->dev.platform_data;
++	struct adc1x8s102_state *st;
++	struct iio_dev *indio_dev = iio_device_alloc(sizeof(*st));
++	int ret;
++
++	if (NULL == indio_dev) {
++		dev_crit(&spi->dev, "Cannot allocate memory for indio_dev\n");
++		return -ENOMEM;
++	}
++
++	st = iio_priv(indio_dev);
++	if (NULL == pdata) {
++		dev_err(&spi->dev, "Cannot get adc1x8s102 platform data\n");
++		return -EFAULT;
++	}
++	st->ext_vin = pdata->ext_vin;
++
++	/* Use regulator, if available. */
++	st->reg = regulator_get(&spi->dev, "vref");
++	if (IS_ERR(st->reg)) {
++		ret = PTR_ERR(st->reg);
++		dev_warn(&spi->dev,
++			 "Cannot get 'vref' regulator\n");
++		goto error_free;
++	}
++	ret = regulator_enable(st->reg);
++	if (ret < 0) {
++		dev_warn(&spi->dev,
++			 "Cannot enable vref regulator\n");
++		goto error_put_reg;
++	}
++
++	spi_set_drvdata(spi, indio_dev);
++	st->spi = spi;
++
++	indio_dev->name = spi_get_device_id(spi)->name;
++	indio_dev->dev.parent = &spi->dev;
++	indio_dev->modes = INDIO_DIRECT_MODE;
++	indio_dev->channels = adc1x8s102_channels;
++	indio_dev->num_channels = ARRAY_SIZE(adc1x8s102_channels);
++	indio_dev->info = &adc1x8s102_info;
++
++	/* Setup default message */
++	st->scan_single_xfer.tx_buf = st->tx_buf;
++	st->scan_single_xfer.rx_buf = st->rx_buf;
++	st->scan_single_xfer.len = 2 * sizeof(__be16);
++	st->scan_single_xfer.cs_change = 0;
++
++	spi_message_init(&st->scan_single_msg);
++	spi_message_add_tail(&st->scan_single_xfer, &st->scan_single_msg);
++
++	ret = iio_triggered_buffer_setup(indio_dev, NULL,
++			&adc1x8s102_trigger_handler, NULL);
++	if (ret)
++		goto error_disable_reg;
++
++	ret = iio_device_register(indio_dev);
++	if (ret) {
++		dev_err(&spi->dev,
++			"Failed to register IIO device\n");
++		goto error_cleanup_ring;
++	}
++	return 0;
++
++error_cleanup_ring:
++	iio_triggered_buffer_cleanup(indio_dev);
++error_disable_reg:
++	regulator_disable(st->reg);
++error_put_reg:
++	regulator_put(st->reg);
++error_free:
++	iio_device_free(indio_dev);
++
++	return ret;
++}
++
++
++static int adc1x8s102_remove(struct spi_device *spi)
++{
++	struct iio_dev *indio_dev;
++	struct adc1x8s102_state *st;
++
++	indio_dev = spi_get_drvdata(spi);
++	if (NULL == indio_dev) {
++		dev_err(&spi->dev, "Cannot get spi_device drvdata\n");
++		return -EFAULT;
++	}
++
++	st = iio_priv(indio_dev);
++
++	iio_device_unregister(indio_dev);
++
++	iio_triggered_buffer_cleanup(indio_dev);
++
++	regulator_disable(st->reg);
++	regulator_put(st->reg);
++
++	iio_device_free(indio_dev);
++
++	return 0;
++}
++
++
++static const struct spi_device_id adc1x8s102_id[] = {
++	{"adc1x8s102", 0},
++	{}
++};
++MODULE_DEVICE_TABLE(spi, adc1x8s102_id);
++
++static struct spi_driver adc1x8s102_driver = {
++	.driver = {
++		.name	= "adc1x8s102",
++		.owner	= THIS_MODULE,
++	},
++	.probe		= adc1x8s102_probe,
++	.remove		= adc1x8s102_remove,
++	.id_table	= adc1x8s102_id,
++};
++module_spi_driver(adc1x8s102_driver);
++
++MODULE_AUTHOR("Bogdan Pricop <bogdan.pricop@emutex.com>");
++MODULE_DESCRIPTION("Texas Instruments ADC1x8S102 driver");
++MODULE_LICENSE("GPL v2");
 diff --git a/drivers/staging/iio/adc/max78m6610_lmu.c b/drivers/staging/iio/adc/max78m6610_lmu.c
 new file mode 100644
-index 0000000..c427517
+index 0000000..ebb2a85
 --- /dev/null
 +++ b/drivers/staging/iio/adc/max78m6610_lmu.c
-@@ -0,0 +1,2235 @@
+@@ -0,0 +1,2575 @@
 +/*
 + * max78m6610+lmu SPI protocol driver
 + *
 + * Copyright(c) 2013 Intel Corporation.
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of version 2 of the GNU General Public License as
-+ * published by the Free Software Foundation.
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
 + *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-+ *
-+ * Contact Information:
-+ * Intel Corporation
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
 + *
 + * This SPI protocol driver is developed for the Maxim 78M6610+LMU (eADC).
 + * The driver is developed as a part of the Quark BSP where integrated into
@@ -219,8 +621,8 @@ index 0000000..c427517
 +#define STATUS_MASK_RELAY1   (1 << 2)
 +#define STATUS_MASK_RELAY2   (1 << 1)
 +#define STATUS_MASK_RESET    (1)
-+#define STATUS_MASK_STICKY   (0x73FFF0)
-+#define STATUS_MASK_IGNORE   (0x00000F)
++#define STATUS_MASK_STICKY   (0x73FFF1)
++#define STATUS_MASK_IGNORE   (0x00000E)
 +
 +#define VSURG_VAL	0x13 /* Voltage surge alarm threshold */
 +#define VSAG_VAL	0x14 /* Voltage sag alarm threshold */
@@ -282,6 +684,23 @@ index 0000000..c427517
 +			| SPI_OP_READ)
 +#define SPI_TB_WRITE(x)	((SPI_TB_ADDR_MASK_5_0(x) << 2)\
 +			| SPI_OP_WRITE)
++
++#define TIMER_PERIOD_MS	90
++#define TIMER_PERIOD	msecs_to_jiffies(TIMER_PERIOD_MS)
++
++#define MASK0_INT	(STATUS_MASK_OV_AMP2 \
++			| STATUS_MASK_OV_AMP1 \
++			| STATUS_MASK_OV_WATT2 \
++			| STATUS_MASK_OV_WATT1 \
++			| STATUS_MASK_VB_SURGE \
++			| STATUS_MASK_VA_SURGE \
++			| STATUS_MASK_UN_VRMSB \
++			| STATUS_MASK_OV_VRMSB \
++			| STATUS_MASK_UN_VRMSA \
++			| STATUS_MASK_OV_VRMSA \
++			| STATUS_MASK_VB_SAG \
++			| STATUS_MASK_VA_SAG)
++
 +
 +/**
 + * max78m6610_lmu_channels structure maps eADC measurement features to
@@ -930,6 +1349,7 @@ index 0000000..c427517
 +	dev_t cdev_no;
 +	struct class *cl;
 +	u8	*bbuffer;
++	struct timer_list	max78m6610_timer;
 +};
 +
 +/**
@@ -1090,7 +1510,7 @@ index 0000000..c427517
 +		ret = -EIO;
 +	}
 +
-+	return 0;
++	return ret;
 +}
 +
 +/**
@@ -1630,8 +2050,11 @@ index 0000000..c427517
 +	return -1;
 +}
 +
++static inline int __max78m6610_lmu_mask0_set(struct max78m6610_lmu_state *st);
++static inline int __max78m6610_lmu_mask0_reset(struct max78m6610_lmu_state *st);
++
 +/**
-+ * max78m6610_lmu_flash_save_cmd
++ * max78m6610_lmu_status_scan
 + *
 + * @param indio_dev: iio_dev pointer
 + *
@@ -1644,9 +2067,12 @@ index 0000000..c427517
 +static int max78m6610_lmu_status_scan(struct iio_dev *indio_dev)
 +{
 +	struct max78m6610_lmu_state *st = iio_priv(indio_dev);
-+	unsigned status;
 +	int ret;
 +	u64 timestamp_ns = iio_get_time_ns();
++	static unsigned old_status;
++	unsigned new_status = 0x00;
++	u16 event_active;
++
 +
 +	mutex_lock(&indio_dev->mlock);
 +	if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
@@ -1654,151 +2080,228 @@ index 0000000..c427517
 +		goto exit_unlock;
 +	}
 +
-+	ret = __max78m6610_lmu_spi_reg_read(st, STATUS, &status);
++	/* Disable eADC interrupts - special-reset MASK0 */
++	ret = __max78m6610_lmu_mask0_reset(st);
++	if (ret) {
++		pr_err("Failed to disable interrupts from MASK0!\n");
++		goto exit_unlock;
++	}
++
++	ret = __max78m6610_lmu_spi_reg_read(st, STATUS, &new_status);
 +	if (ret) {
 +		pr_err("Failed to read STATUS register\n");
 +		goto exit_unlock;
 +	}
-+
-+	status &= ~STATUS_MASK_IGNORE;
-+
-+	/* Nothing more to do if no interesting status bits are set */
-+	if (!status)
-+		goto exit_unlock;
++	new_status &= ~STATUS_MASK_IGNORE;
 +
 +	/* Not all of the event types used below are ideal, but there is a
 +	 * limited set available and we want to use different event types for
 +	 * the different events (e.g sag vs. min-threshold) to allow user
 +	 * applications to distinguish them
 +	 */
-+	if (status & STATUS_MASK_VA_SAG) {
++	if ((new_status & STATUS_MASK_VA_SAG) ^
++			(old_status & STATUS_MASK_VA_SAG)) {
++		event_active = !!(new_status & STATUS_MASK_VA_SAG);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 0,
-+						    IIO_EV_TYPE_MAG,
-+						    IIO_EV_DIR_FALLING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_FALLING,
++					IIO_EV_TYPE_MAG,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_VB_SAG) {
++	if ((new_status & STATUS_MASK_VB_SAG) ^
++			(old_status & STATUS_MASK_VB_SAG)) {
++		event_active = !!(new_status & STATUS_MASK_VB_SAG);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 1,
-+						    IIO_EV_TYPE_MAG,
-+						    IIO_EV_DIR_FALLING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_FALLING,
++					IIO_EV_TYPE_MAG,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_VRMSA) {
++	if ((new_status & STATUS_MASK_OV_VRMSA) ^
++			(old_status & STATUS_MASK_OV_VRMSA)) {
++		event_active = !!(new_status & STATUS_MASK_OV_VRMSA);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 0,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_UN_VRMSA) {
++	if ((new_status & STATUS_MASK_UN_VRMSA) ^
++			(old_status & STATUS_MASK_UN_VRMSA)) {
++		event_active = !!(new_status & STATUS_MASK_UN_VRMSA);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 0,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_FALLING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_FALLING,
++					IIO_EV_TYPE_THRESH,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_VRMSB) {
++	if ((new_status & STATUS_MASK_OV_VRMSB) ^
++			(old_status & STATUS_MASK_OV_VRMSB)) {
++		event_active = !!(new_status & STATUS_MASK_OV_VRMSB);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 1,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_UN_VRMSB) {
++	if ((new_status & STATUS_MASK_UN_VRMSB) ^
++			(old_status & STATUS_MASK_UN_VRMSB)) {
++		event_active = !!(new_status & STATUS_MASK_UN_VRMSB);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 1,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_FALLING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_FALLING,
++					IIO_EV_TYPE_THRESH,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_VA_SURGE) {
++	if ((new_status & STATUS_MASK_VA_SURGE) ^
++			(old_status & STATUS_MASK_VA_SURGE)) {
++		event_active = !!(new_status & STATUS_MASK_VA_SURGE);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 0,
-+						    IIO_EV_TYPE_MAG,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_MAG,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_VB_SURGE) {
++	if ((new_status & STATUS_MASK_VB_SURGE) ^
++			(old_status & STATUS_MASK_VB_SURGE)) {
++		event_active = !!(new_status & STATUS_MASK_VB_SURGE);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE, 1,
-+						    IIO_EV_TYPE_MAG,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_VOLTAGE,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_MAG,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_WATT1) {
++	if ((new_status & STATUS_MASK_OV_WATT1) ^
++			(old_status & STATUS_MASK_OV_WATT1)) {
++		event_active = !!(new_status & STATUS_MASK_OV_WATT1);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_POWER, 0,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_POWER,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_WATT2) {
++	if ((new_status & STATUS_MASK_OV_WATT2) ^
++			(old_status & STATUS_MASK_OV_WATT2)) {
++		event_active = !!(new_status & STATUS_MASK_OV_WATT2);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_POWER, 1,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_POWER,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_AMP1) {
++	if ((new_status & STATUS_MASK_OV_AMP1) ^
++			(old_status & STATUS_MASK_OV_AMP1)) {
++		event_active = !!(new_status & STATUS_MASK_OV_AMP1);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_CURRENT, 0,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_CURRENT,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					0 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
-+	if (status & STATUS_MASK_OV_AMP2) {
++	if ((new_status & STATUS_MASK_OV_AMP2) ^
++			(old_status & STATUS_MASK_OV_AMP2)) {
++		event_active = !!(new_status & STATUS_MASK_OV_AMP2);
 +		iio_push_event(indio_dev,
-+			       IIO_UNMOD_EVENT_CODE(IIO_CURRENT, 1,
-+						    IIO_EV_TYPE_THRESH,
-+						    IIO_EV_DIR_RISING),
-+			       timestamp_ns);
++				IIO_EVENT_CODE(IIO_CURRENT,
++					0 /* diff */,
++					IIO_NO_MOD,
++					IIO_EV_DIR_RISING,
++					IIO_EV_TYPE_THRESH,
++					1 /* chan */,
++					0 /* chan1 */,
++					event_active /* chan2 */),
++				timestamp_ns);
 +	}
 +
++	/* Write reset register, clearing only bits that we've processed and
++	 * RESET bit if it was set at the time of the last read of STATUS */
 +	ret = __max78m6610_lmu_spi_reg_write(st, STATUS_RESET,
-+					     status & STATUS_MASK_STICKY);
++			new_status & STATUS_MASK_STICKY);
 +	if (ret) {
 +		pr_err("Failed to write STATUS_RESET register\n");
 +		goto exit_unlock;
 +	}
 +
++	/* Save the current state of STATUS to be used next time as reference*/
++	old_status = new_status;
++	if (new_status & STATUS_MASK_STICKY) {
++		mod_timer(&st->max78m6610_timer, jiffies + TIMER_PERIOD);
++	} else {
++		del_timer(&st->max78m6610_timer);
++		/* Re-enable eADC interrupts by restoring the content
++		 * of MASK0 register */
++		ret = __max78m6610_lmu_mask0_set(st);
++		if (ret) {
++			pr_err("Failed to restore MASK0 register!\n");
++			goto exit_unlock;
++		}
++	}
++	mutex_unlock(&indio_dev->mlock);
++	return ret;
++
 +exit_unlock:
++	/* if something failed setup the timer to fire again no matter what */
++	mod_timer(&st->max78m6610_timer, jiffies + TIMER_PERIOD);
 +	mutex_unlock(&indio_dev->mlock);
 +
 +	return ret;
 +}
 +
-+/**
-+ * max78m6610_lmu_write_status_scan
-+ *
-+ * @param dev: device descriptor associated with sysfs attribute node
-+ * @param attr: device sysfs attribute descriptor
-+ * @param buf: data written by user to the attribute node
-+ * @param len: length in bytes of data written by user
-+ *
-+ * This handles a write to this sysfs node from user-space, and invokes a
-+ * read of the status register on the MAX78M6610+LMU if an appropriate value
-+ * is written.  Valid input character values are 1, y and Y
-+ */
-+static ssize_t max78m6610_lmu_write_status_scan(struct device *dev,
-+		struct device_attribute *attr,
-+		const char *buf, size_t len)
-+{
-+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-+	int ret = 0;
-+
-+	if (len < 1)
-+		return -1;
-+	switch (buf[0]) {
-+	case '1':
-+	case 'y':
-+	case 'Y':
-+		ret = max78m6610_lmu_status_scan(indio_dev);
-+		return ret ? ret : len;
-+	}
-+	return -1;
-+}
 +
 +/**
 + * max78m6610_lmu_write_int
@@ -1852,16 +2355,20 @@ index 0000000..c427517
 +	.attrs = max78m6610_lmu_attributes,
 +};
 +
-+/* Provides an option to poll for events (useful if interrupts unavailable) */
-+static IIO_DEVICE_ATTR(do_status_scan, S_IWUSR, NULL,
-+		       max78m6610_lmu_write_status_scan, 0);
++/* Provides an option to poll for events (useful if interrupts unavailable)
++ * The option to poll for events is no longer supported, but we need to have at
++ * least 1 event attribute to enable the IIO events.
++ * That's why this attribute is created with no _show and no _store handlers.
++ * */
++static IIO_DEVICE_ATTR(null, S_IWUSR, NULL, NULL, 0);
++
 +
 +/* Need to have at least 1 event attribute to enable IIO events.
 + * Purposely not setting .event_mask for the channels because that would
 + * enable the IIO events sysfs entries which are not suitable for this driver
 + */
 +static struct attribute *max78m6610_lmu_event_attributes[] = {
-+	&iio_dev_attr_do_status_scan.dev_attr.attr,
++	&iio_dev_attr_null.dev_attr.attr,
 +	NULL,
 +};
 +
@@ -2212,11 +2719,239 @@ index 0000000..c427517
 +	return 0;
 +}
 +
++
++/* Spinlock used to lock the external and timer interrupt handlers */
++static DEFINE_SPINLOCK(max78m6610_spinlock);
++
++/* Pointer used to pass iio_dev from top-half to bottom-half handler */
++static void *wq_indio_dev;
++
++/* Workqueue used for deffering the work in the bottom-half handler */
++static void max78m6610_lmu_irq_do_work(struct work_struct *max78m6610_lmu_wq);
++static DECLARE_WORK(max78m6610_lmu_wq, max78m6610_lmu_irq_do_work);
++
++
++/* max78m6610_lmu_irq_do_work
++ *
++ * @param max78m6610_lmu_wq: working item
++ *
++ * Worker function of the work queue which does the bottom-half processing of
++ * MAX78M6610 IRQ.
++ */
++static void max78m6610_lmu_irq_do_work(struct work_struct *max78m6610_lmu_wq)
++{
++	int ret = 0x00;
++
++	ret = max78m6610_lmu_status_scan((struct iio_dev *)wq_indio_dev);
++
++	if (ret)
++		pr_err("MAX78M6610 status scan failed; return code: %d\n", ret);
++}
++
++
++
++/* max78m6610_lmu_irq_handler
++ *
++ * @param irq: IRQ number
++ * @param private: The dev_id cookie passed to request_irq()
++ *
++ * @return:
++ *	IRQ_NONE	interrupt was not from this device
++ *	IRQ_HANDLED	interrupt was handled by this device
++ *	IRQ_WAKE_THREAD	handler requests to wake the handler thread
++ *
++ * Interrupt handler for eADC IRQ.
++ */
++static irqreturn_t max78m6610_lmu_irq_handler(int irq, void *private)
++{
++	spin_lock(&max78m6610_spinlock);
++
++	wq_indio_dev = private;
++	schedule_work(&max78m6610_lmu_wq);
++
++	spin_unlock(&max78m6610_spinlock);
++	return IRQ_HANDLED;
++}
++
++
++/* __max78m6610_lmu_mask0_reset
++ *
++ * @param indio_dev: iio_dev pointer
++ * @return 0 on success, non-zero errno otherwise
++ *
++ * Clears all bits of MASK0 register except RELAY2 bit.
++ *
++ * If MASK0 register is completely cleared (write 0x00 to it) while the MP0
++ * bit is already active, the MP0 bit is not de-activated.
++ * If MASK0 register's value != 0x00 and MASK0 & STATUS == 0, the MP0 bit is
++ * de-activated.
++ *
++ * (MP0 pin == 0) && (MASK0 & STATUS == 0) && (MASK0 != 0) => MP0 = 1
++ * (interrupt line is de-asserted)
++ */
++static inline int __max78m6610_lmu_mask0_reset(struct max78m6610_lmu_state *st)
++{
++	return __max78m6610_lmu_spi_reg_write(st, MASK0, STATUS_MASK_RELAY2);
++}
++
++
++/* __max78m6610_lmu_mask0_set
++ *
++ * @param st: eADC state structure
++ * @return 0 on success, non-zero errno otherwise
++ *
++ * Sets on eADC chip the MASK0 bits corresponding to the events we want to
++ * receive an interrupt for.
++ * If one wants to modify the events which the driver receives interrupt for, he
++ * must modify MASK0_INT macro
++ */
++static inline int __max78m6610_lmu_mask0_set(struct max78m6610_lmu_state *st)
++{
++	return __max78m6610_lmu_spi_reg_write(st, MASK0, MASK0_INT);
++}
++
++
++/* max78m6610_lmu_mask0_set_default
++ *
++ * @param indio_dev: IIO device
++ * @return 0 on success, non-zero errno otherwise
++ *
++ * Read MASK0 register, check if it's default value is already MASK0_INT,
++ * otherwise set MASK0 = MASK0_INT and save defaults into flash in order to
++ * change MASK0 default value.
++ */
++static int max78m6610_lmu_mask0_set_default(struct iio_dev *indio_dev)
++{
++	int ret = 0;
++	unsigned mask0 = 0x00;
++	struct max78m6610_lmu_state *st = iio_priv(indio_dev);
++
++	/* Read MASK0 value */
++	mutex_lock(&indio_dev->mlock);
++	ret = __max78m6610_lmu_spi_reg_read(st, MASK0, &mask0);
++	if (ret) {
++		pr_err("Failed to read MASK0 register! ret: %d\n", ret);
++		goto error_unlock;
++	}
++	mutex_unlock(&indio_dev->mlock);
++	if (mask0 != MASK0_INT) {
++		/* Tell eADC what events to generate interrupt for */
++		mutex_lock(&indio_dev->mlock);
++		ret = __max78m6610_lmu_mask0_set(st);
++		if (ret) {
++			pr_err("Failed to enable interrupts on eADC side!\n");
++			goto error_unlock;
++		}
++		mutex_unlock(&indio_dev->mlock);
++
++		/* Save MASK0 default to flash */
++		ret = max78m6610_lmu_flash_save_cmd(indio_dev);
++		if (ret) {
++			pr_err("Failed to save MASK0 default to flash!\n");
++			goto error_ret;
++		}
++	}
++	return 0;
++
++error_unlock:
++	mutex_unlock(&indio_dev->mlock);
++error_ret:
++	return ret;
++}
++
++
++/*
++ * max78m6610_lmu_irq_init
++ *
++ * @param indio_dev: IIO device
++ * @return 0 on success, non-zero errno otherwise
++ *
++ * Allocate memory for IIO triger, request the IRQ for eADC, set IIO triger
++ * parent and operations; register IIO trigger; set this trigger as default
++ * trigger; configure MASK0 default value.
++ */
++static int max78m6610_lmu_irq_init(struct iio_dev *indio_dev)
++{
++	struct max78m6610_lmu_state *st = iio_priv(indio_dev);
++	int ret = 0;
++
++	if (st->spi->irq < 0) {
++		pr_warn("MAX78M6610+LMU IRQ not set. spi->irq: %d\n",
++				st->spi->irq);
++		return 0;
++	}
++
++	ret = request_irq(st->spi->irq, max78m6610_lmu_irq_handler,
++			IRQF_TRIGGER_FALLING, spi_get_device_id(st->spi)->name,
++			indio_dev);
++	if (ret) {
++		pr_err("Failed to request IRQ %d: request_irg returned %d.\n",
++				st->spi->irq, ret);
++		goto error_ret;
++	}
++
++	/* Check and set MASK0 default */
++	ret = max78m6610_lmu_mask0_set_default(indio_dev);
++	if (ret) {
++		pr_err("Failed to set MASK0 default!\n");
++		goto error_free_irq;
++	}
++
++	return 0;
++
++error_free_irq:
++	free_irq(st->spi->irq, indio_dev);
++error_ret:
++	return ret;
++}
++
++
++/* max78m6610_lmu_irq_remove
++ *
++ * @param indio_dev: IIO device
++ * @return N/A
++ *
++ * Unregister IIO trigger, release the IRQ and free IIO triger memory
++ */
++static void max78m6610_lmu_irq_remove(struct iio_dev *indio_dev)
++{
++	int ret;
++	u32 mask0 = 0x00;
++	struct max78m6610_lmu_state *st = iio_priv(indio_dev);
++
++	if (st->spi->irq < 0)
++		return;
++	/* Instruct MAX78M6610+LMU chip to stop generating interrupts on MP0 */
++	mutex_lock(&indio_dev->mlock);
++	ret = __max78m6610_lmu_spi_reg_write(st, MASK0, mask0);
++	if (ret)
++		pr_warn("Failed to write MASK0 register.\n");
++	mutex_unlock(&indio_dev->mlock);
++
++	free_irq(st->spi->irq, indio_dev);
++}
++
++/* max78m6610_lmu_timer_handler
++ *
++ * @param data: unused
++ * @reutnr N/A
++ *
++ * max78m6610_timer interrupt handler
++ */
++static void max78m6610_lmu_timer_handler(unsigned long data)
++{
++	spin_lock(&max78m6610_spinlock);
++	if (NULL != wq_indio_dev)
++		schedule_work(&max78m6610_lmu_wq);
++	spin_unlock(&max78m6610_spinlock);
++}
++
++
 +/**
 + * max78m6610_lmu_probe
 + *
 + * @param spi: spi device pointer
-+ * @return: return 0 or standard errorids if failure
++ * @return: return 0 or standard error ids if failure
 + *
 + * device driver probe funciton for iio_dev struct initialisation.
 + */
@@ -2269,9 +3004,17 @@ index 0000000..c427517
 +	ret = max78m6610_lmu_chrdev_init(st);
 +	if (ret)
 +		goto error_cleanup_ring;
++	/* Init the external GPIO interrupt */
++	ret = max78m6610_lmu_irq_init(indio_dev);
++	if (ret)
++		goto error_cleanup_chrdev;
++	/* Initialise the timer */
++	setup_timer(&st->max78m6610_timer, max78m6610_lmu_timer_handler, 0);
 +
 +	return 0;
 +
++error_cleanup_chrdev:
++	max78m6610_lmu_chrdev_remove(st);
 +error_cleanup_ring:
 +	iio_triggered_buffer_cleanup(indio_dev);
 +error_free:
@@ -2293,8 +3036,14 @@ index 0000000..c427517
 +	struct iio_dev *indio_dev = spi_get_drvdata(spi);
 +	struct max78m6610_lmu_state *st = iio_priv(indio_dev);
 +
++	del_timer(&st->max78m6610_timer);
++
++	max78m6610_lmu_irq_remove(indio_dev);
++
 +	max78m6610_lmu_chrdev_remove(st);
++
 +	iio_device_unregister(indio_dev);
++
 +	iio_triggered_buffer_cleanup(indio_dev);
 +	iio_device_free(indio_dev);
 +
@@ -2697,31 +3446,60 @@ index fbf8adf..721ed6f 100644
  };
  
  #endif /* IIO_ADC_AD7298_H_ */
+diff --git a/include/linux/platform_data/adc1x8s102.h b/include/linux/platform_data/adc1x8s102.h
+new file mode 100644
+index 0000000..a32a499
+--- /dev/null
++++ b/include/linux/platform_data/adc1x8s102.h
+@@ -0,0 +1,30 @@
++/*
++ * ADC1x8S102 SPI ADC driver
++ *
++ * Copyright(c) 2013 Intel Corporation.
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
++ */
++
++
++#ifndef __LINUX_PLATFORM_DATA_ADC1x8S102_H__
++#define __LINUX_PLATFORM_DATA_ADC1x8S102_H__
++
++
++/**
++ * struct adc1x8s102_platform_data - Platform data for the adc1x8s102 ADC driver
++ * @ext_vin: External input voltage range for all voltage input channels
++ *	This is the voltage level of pin VA in millivolts
++ **/
++struct adc1x8s102_platform_data {
++	u16  ext_vin;
++};
++
++#endif /* __LINUX_PLATFORM_DATA_ADC1x8S102_H__ */
 diff --git a/include/linux/platform_data/max78m6610_lmu.h b/include/linux/platform_data/max78m6610_lmu.h
 new file mode 100644
-index 0000000..d05d513
+index 0000000..457124d
 --- /dev/null
 +++ b/include/linux/platform_data/max78m6610_lmu.h
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,27 @@
 +/*
 + * Platform data for max78m6610+lmu SPI protocol driver
 + * Copyright(c) 2013 Intel Corporation.
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of version 2 of the GNU General Public License as
-+ * published by the Free Software Foundation.
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
 + *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-+ *
-+ * Contact Information:
-+ * Intel Corporation
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
 + */
 +
 +#ifndef __LINUX_PLATFORM_DATA_MAX78M6610_LMU_H__
@@ -2737,6 +3515,3 @@ index 0000000..d05d513
 +};
 +
 +#endif /* IIO_ADC_MAX78M6610_LMU_H_ */
--- 
-1.7.4.1
-

@@ -4,8 +4,8 @@ Date: Tue, 11 Feb 2014 16:28:26 +0000
 Subject: [PATCH 21/21] Quark SPI flash
 
 ---
- drivers/mtd/devices/Kconfig  |    5 +++++
- drivers/mtd/devices/Makefile |    3 +--
+ drivers/mtd/devices/Kconfig  | 5 +++++
+ drivers/mtd/devices/Makefile | 3 +--
  2 files changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/drivers/mtd/devices/Kconfig b/drivers/mtd/devices/Kconfig
@@ -36,6 +36,3 @@ index 395733a..4c8e399 100644
 -CFLAGS_docg3.o			+= -I$(src)
 \ No newline at end of file
 +CFLAGS_docg3.o			+= -I$(src)
--- 
-1.7.4.1
-

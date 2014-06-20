@@ -4,24 +4,24 @@ Date: Mon, 24 Feb 2014 18:41:59 +0000
 Subject: [PATCH 18/21] Quark sensors
 
 ---
- drivers/iio/accel/Kconfig                          |    8 +
- drivers/iio/accel/Makefile                         |    2 +
- drivers/iio/accel/lis331dlh_intel_qrk.c            |  735 ++++++++++++++++++++
- drivers/iio/common/Kconfig                         |    1 +
- drivers/iio/common/Makefile                        |    1 +
- drivers/iio/common/st_sensors/Kconfig              |   14 +
- drivers/iio/common/st_sensors/Makefile             |   10 +
- drivers/iio/common/st_sensors/st_sensors_buffer.c  |  115 +++
- drivers/iio/common/st_sensors/st_sensors_core.c    |  447 ++++++++++++
- drivers/iio/common/st_sensors/st_sensors_i2c.c     |   81 +++
- drivers/iio/common/st_sensors/st_sensors_spi.c     |  128 ++++
- drivers/iio/common/st_sensors/st_sensors_trigger.c |   77 ++
- drivers/iio/industrialio-buffer.c                  |    6 +-
- include/linux/iio/common/st_sensors.h              |  289 ++++++++
- include/linux/iio/common/st_sensors_i2c.h          |   20 +
- include/linux/iio/common/st_sensors_spi.h          |   20 +
- include/linux/platform_data/lis331dlh_intel_qrk.h  |   36 +
- 17 files changed, 1987 insertions(+), 3 deletions(-)
+ drivers/iio/accel/Kconfig                          |   8 +
+ drivers/iio/accel/Makefile                         |   2 +
+ drivers/iio/accel/lis331dlh_intel_qrk.c            | 728 +++++++++++++++++++++
+ drivers/iio/common/Kconfig                         |   1 +
+ drivers/iio/common/Makefile                        |   1 +
+ drivers/iio/common/st_sensors/Kconfig              |  14 +
+ drivers/iio/common/st_sensors/Makefile             |  10 +
+ drivers/iio/common/st_sensors/st_sensors_buffer.c  | 115 ++++
+ drivers/iio/common/st_sensors/st_sensors_core.c    | 447 +++++++++++++
+ drivers/iio/common/st_sensors/st_sensors_i2c.c     |  81 +++
+ drivers/iio/common/st_sensors/st_sensors_spi.c     | 128 ++++
+ drivers/iio/common/st_sensors/st_sensors_trigger.c |  77 +++
+ drivers/iio/industrialio-buffer.c                  |   6 +-
+ include/linux/iio/common/st_sensors.h              | 289 ++++++++
+ include/linux/iio/common/st_sensors_i2c.h          |  20 +
+ include/linux/iio/common/st_sensors_spi.h          |  20 +
+ include/linux/platform_data/lis331dlh_intel_qrk.h  |  29 +
+ 17 files changed, 1973 insertions(+), 3 deletions(-)
  create mode 100644 drivers/iio/accel/lis331dlh_intel_qrk.c
  create mode 100644 drivers/iio/common/st_sensors/Kconfig
  create mode 100644 drivers/iio/common/st_sensors/Makefile
@@ -65,30 +65,23 @@ index 5bc6855..81f8085 100644
 +obj-$(CONFIG_IIO_LIS331DLH_INTEL_QRK) += lis331dlh_intel_qrk.o
 diff --git a/drivers/iio/accel/lis331dlh_intel_qrk.c b/drivers/iio/accel/lis331dlh_intel_qrk.c
 new file mode 100644
-index 0000000..6b49c6f
+index 0000000..fe868fd
 --- /dev/null
 +++ b/drivers/iio/accel/lis331dlh_intel_qrk.c
-@@ -0,0 +1,735 @@
+@@ -0,0 +1,728 @@
 +/*
 + * Intel Clanton Hill platform accelerometer driver
 + *
 + * Copyright(c) 2013 Intel Corporation.
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of version 2 of the GNU General Public License as
-+ * published by the Free Software Foundation.
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
 + *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-+ *
-+ * Contact Information:
-+ * Intel Corporation
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
 + *
 + * Derived from STMicroelectronics accelerometers driver by Denis Ciocca
 + *
@@ -2110,30 +2103,23 @@ index 0000000..d964a35
 +#endif /* ST_SENSORS_SPI_H */
 diff --git a/include/linux/platform_data/lis331dlh_intel_qrk.h b/include/linux/platform_data/lis331dlh_intel_qrk.h
 new file mode 100644
-index 0000000..703c927
+index 0000000..f0d914c
 --- /dev/null
 +++ b/include/linux/platform_data/lis331dlh_intel_qrk.h
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,29 @@
 +/*
 + * Platform data for Intel Clanton Hill platform accelerometer driver
 + *
 + * Copyright(c) 2013 Intel Corporation.
 + *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of version 2 of the GNU General Public License as
-+ * published by the Free Software Foundation.
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU General Public License,
++ * version 2, as published by the Free Software Foundation.
 + *
-+ * This program is distributed in the hope that it will be useful, but
-+ * WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-+ * General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-+ *
-+ * Contact Information:
-+ * Intel Corporation
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
++ * more details.
 + *
 + */
 +
@@ -2150,6 +2136,3 @@ index 0000000..703c927
 +};
 +
 +#endif /* LINUX_PLATFORM_DATA_LIS331DLH_INTEL_QRK_H_ */
--- 
-1.7.4.1
-
