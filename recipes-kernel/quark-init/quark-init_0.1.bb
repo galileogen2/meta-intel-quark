@@ -3,21 +3,31 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COREBASE}/meta/COPYING.MIT;md5=3da9cfbcb788c80a0384361b4de20420"
 
 SRC_URI = "file://quark-init.sh \
-           file://galileo.conf"
+           file://galileo.conf \
+           file://galileo_gen2.conf \
+           file://quark-init.service"
 
 INSTALLDIR = "/etc/modules-load.quark"
-FILES_${PN} += "${INSTALLDIR}"
+FILES_${PN} += "${INSTALLDIR} \
+                ${sbindir}/quark-init.sh"
 FILES_${PN}-dbg += "${INSTALLDIR}/.debug"
 
 do_install() {
         install -d ${D}${INSTALLDIR}
         install -m 0755 ${WORKDIR}/galileo.conf ${D}${INSTALLDIR}/
+        install -m 0755 ${WORKDIR}/galileo_gen2.conf ${D}${INSTALLDIR}/
         install -d ${D}${sysconfdir}/init.d
         install -m 0755 ${WORKDIR}/quark-init.sh ${D}${sysconfdir}/init.d
+
+        install -d ${D}${systemd_unitdir}/system/
+        install -m 0644 ${WORKDIR}/quark-init.service ${D}${systemd_unitdir}/system/
+        install -d ${D}${sbindir}
+        install -m 0755 ${WORKDIR}/quark-init.sh ${D}${sbindir}
 }
 
-inherit update-rc.d
+inherit update-rc.d systemd
 
 INITSCRIPT_NAME = "quark-init.sh"
 INITSCRIPT_PARAMS = "start 75 5 ."
 
+SYSTEMD_SERVICE_${PN} = "quark-init.service"

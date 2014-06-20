@@ -9,9 +9,13 @@ load_drivers()
 
 do_board()
 {
-    type dmidecode > /dev/null 2>&1 || die "dmidecode not installed"
-    board=$(dmidecode -s baseboard-product-name)
-    case "$board" in *"Galileo" ) load_drivers "galileo" ;; esac
+    board=$(cat /sys/devices/virtual/dmi/id/board_name)
+    case "$board" in
+        *"GalileoGen2" )
+            load_drivers "galileo_gen2" ;;
+        *"Galileo" )
+            load_drivers "galileo" ;;
+    esac
 }
 
 die()
