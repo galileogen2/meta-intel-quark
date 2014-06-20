@@ -109,8 +109,8 @@ module_autoload_usbhid = "usbhid"
 module_autoload_evdev = "evdev"
 # USB Device
 module_autoload_pch-udc = "pch_udc"
-module_autoload_g-serial = "g_serial"
-module_conf_g-serial = " vendor=0x8086 product=0xBABE"
+module_autoload_g-serial = "g_acm_ms"
+module_conf_g-serial = " file=/dev/mmcblk0p1 removable=1 idVendor=0x8086 idProduct=0xBABE"
 # SDHC
 module_autoload_sdhci-pci = "sdhci-pci"
 module_autoload_mmc-block = "mmc_block"
