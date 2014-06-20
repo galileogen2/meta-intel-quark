@@ -92,3 +92,35 @@ SRC_URI += "file://0020-Quark-IIO-quark.patch"
 SRC_URI += "file://0021-Quark-SPI-flash-quark.patch"
 SRC_URI += "file://0001-libtraceevent-Remove-hard-coded-include-to-usr-local.patch"
 
+# list of kernel modules that will be auto-loaded for Quark X1000-based
+# platforms.
+# For platform specific kernel module, please define the list at respective
+# platform-specific recipes-kernel/linux/linux-yocto-quark_3.8.bbappend
+# e.g. meta-galileo/recipes-kernel/linux/linux-yocto-quark_3.8.bbappend
+# Be extra careful on the kernel module naming as some use '-' and '_' as
+# character seperator.
+
+# USB Host
+module_autoload_ehci-hcd = "ehci-hcd"
+module_autoload_ehci-pci = "ehci-pci"
+module_autoload_ohci-hcd = "ohci-hcd"
+module_autoload_usb-storage = "usb-storage"
+module_autoload_usbhid = "usbhid"
+module_autoload_evdev = "evdev"
+# USB Device
+module_autoload_pch-udc = "pch_udc"
+module_autoload_g-serial = "g_serial"
+module_conf_g-serial = " vendor=0x8086 product=0xBABE"
+# SDHC
+module_autoload_sdhci-pci = "sdhci-pci"
+module_autoload_mmc-block = "mmc_block"
+# SPI
+module_autoload_spidev = "spidev"
+module_autoload_spi-pxa2xx = "spi-pxa2xx"
+module_autoload_spi-pxa2xx-pci = "spi-pxa2xx-pci"
+# GPIO
+module_autoload_gpio-sch = "gpio-sch"
+# Ethernet
+module_autoload_stmmac = "stmmac"
+# EEPROM Access
+module_autoload_at24 = "at24"
