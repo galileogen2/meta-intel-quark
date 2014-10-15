@@ -21,7 +21,12 @@ SRC_URI = "git://github.com/vathpela/grub-fedora.git"
 
 SRC_URI += "file://quark.patch"
 
-CFLAGS_append = " -Os -fno-strict-aliasing -Wall -Werror -Wno-shadow -Wno-unused  -Wno-pointer-sign "
+# To build GRUB with test code automatically loaded, simply uncomment this line
+# or add PACKAGECONFIG_pn-grub="grub_test" under conf/local.conf
+#PACKAGECONFIG ?= "grub_test"
+
+CFLAGS_append = " -Os -fno-strict-aliasing -Wall -Werror -Wno-shadow -Wno-unused  -Wno-pointer-sign \
+	-DINTEL_QUARK_TEST=${@base_contains('PACKAGECONFIG', 'grub_test', '1', '0', d)}"
 
 S = "${WORKDIR}/git"
 SEPB = "${S}"
