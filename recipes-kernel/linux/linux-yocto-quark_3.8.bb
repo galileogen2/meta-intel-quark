@@ -124,3 +124,5 @@ module_autoload_gpio-sch = "gpio-sch"
 module_autoload_stmmac = "stmmac"
 # EEPROM Access
 module_autoload_at24 = "at24"
+# efivars
+module_autoload_efivars = "efivars"
