@@ -17,7 +17,7 @@ RDEPENDS_${PN} = "diffutils"
 DEPENDS = "gnu-efi"
 PR = "r0"
 
-SRC_URI = "git://github.com/vathpela/grub-fedora.git"
+SRC_URI = "git://github.com/intel-iot-devkit/grub-fedora.git"
 
 SRC_URI += "file://quark.patch"
 
