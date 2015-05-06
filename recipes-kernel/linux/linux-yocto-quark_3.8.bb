@@ -102,27 +102,32 @@ SRC_URI += "file://uart-1.0.patch"
 # character seperator.
 
 # USB Host
-module_autoload_ehci-hcd = "ehci-hcd"
-module_autoload_ehci-pci = "ehci-pci"
-module_autoload_ohci-hcd = "ohci-hcd"
-module_autoload_usb-storage = "usb-storage"
-module_autoload_usbhid = "usbhid"
-module_autoload_evdev = "evdev"
+KERNEL_MODULE_AUTOLOAD += "ehci-hcd"
+KERNEL_MODULE_AUTOLOAD += "ehci-pci"
+KERNEL_MODULE_AUTOLOAD += "ohci-hcd"
+KERNEL_MODULE_AUTOLOAD += "usb-storage"
+KERNEL_MODULE_AUTOLOAD += "usbhid"
+KERNEL_MODULE_AUTOLOAD += "evdev"
+
 # USB Device (pch_udc is required for g_serial to load)
-module_autoload_pch_udc = "pch_udc g_serial"
+KERNEL_MODULE_AUTOLOAD += "pch_udc g_serial"
+
+KERNEL_MODULE_PROBECONF += "g_serial"
 module_conf_g_serial = "options g_serial vendor=0x8086 product=0xBABE"
+
+
 # SDHC
-module_autoload_sdhci-pci = "sdhci-pci"
-module_autoload_mmc-block = "mmc_block"
+KERNEL_MODULE_AUTOLOAD += "sdhci-pci"
+KERNEL_MODULE_AUTOLOAD += "mmc_block"
 # SPI
-module_autoload_spidev = "spidev"
-module_autoload_spi-pxa2xx = "spi-pxa2xx"
-module_autoload_spi-pxa2xx-pci = "spi-pxa2xx-pci"
+KERNEL_MODULE_AUTOLOAD += "spidev"
+KERNEL_MODULE_AUTOLOAD += "spi-pxa2xx"
+KERNEL_MODULE_AUTOLOAD += "spi-pxa2xx-pci"
 # GPIO
-module_autoload_gpio-sch = "gpio-sch"
+KERNEL_MODULE_AUTOLOAD += "gpio-sch"
 # Ethernet
-module_autoload_stmmac = "stmmac"
+KERNEL_MODULE_AUTOLOAD += "stmmac"
 # EEPROM Access
-module_autoload_at24 = "at24"
+KERNEL_MODULE_AUTOLOAD += "at24"
 # efivars
-module_autoload_efivars = "efivars"
+KERNEL_MODULE_AUTOLOAD += "efivars"
