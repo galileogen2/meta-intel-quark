@@ -41,28 +41,10 @@ Signed-off-by: Ong Boon Leong <boon.leong.ong@intel.com>
  create mode 100644 gas/testsuite/gas/i386/omit-lock-yes.d
  create mode 100644 gas/testsuite/gas/i386/omit-lock.s
 
-diff --git a/gas/ChangeLog b/gas/ChangeLog
-index 7fafa26..b243bf1 100644
---- a/gas/ChangeLog
-+++ b/gas/ChangeLog
-@@ -1,3 +1,13 @@
-+2014-08-06  Ilya Tocar  <ilya.tocar@intel.com>
-+
-+	* config/tc-i386.c (omit_lock_prefix): New.
-+	(output_insn): Omit lock prefix if omit_lock_prefix is true.
-+	(OPTION_omit_lock_prefix): New.
-+	(md_longopts): Add momit-lock-prefix.
-+	(md_parse_option): Handle momit-lock-prefix.
-+	(md_show_usage): Add momit-lock-prefix=[no|yes].
-+	* doc/c-i386.texi (momit-lock-prefix): Document.
-+
- 2013-11-18  H.J. Lu  <hongjiu.lu@intel.com>
- 
- 	* config/tc-i386.c (lex_got): Add a dummy "int bnd_prefix"
-diff --git a/gas/config/tc-i386.c b/gas/config/tc-i386.c
-index 3c423da..e7c9d47 100644
---- a/gas/config/tc-i386.c
-+++ b/gas/config/tc-i386.c
+Index: binutils-2.24/gas/config/tc-i386.c
+===================================================================
+--- binutils-2.24.orig/gas/config/tc-i386.c
++++ binutils-2.24/gas/config/tc-i386.c
 @@ -541,6 +541,10 @@ static int add_bnd_prefix = 0;
  /* 1 if pseudo index register, eiz/riz, is allowed .  */
  static int allow_index_reg = 0;
@@ -132,11 +114,11 @@ index 3c423da..e7c9d47 100644
  }
  
  #if ((defined (OBJ_MAYBE_COFF) && defined (OBJ_MAYBE_AOUT)) \
-diff --git a/gas/doc/c-i386.texi b/gas/doc/c-i386.texi
-index 7ca70c9..2100b48 100644
---- a/gas/doc/c-i386.texi
-+++ b/gas/doc/c-i386.texi
-@@ -282,6 +282,18 @@ The @code{.att_syntax} and @code{.intel_syntax} directives will take precedent.
+Index: binutils-2.24/gas/doc/c-i386.texi
+===================================================================
+--- binutils-2.24.orig/gas/doc/c-i386.texi
++++ binutils-2.24/gas/doc/c-i386.texi
+@@ -282,6 +282,18 @@ The @code{.att_syntax} and @code{.intel_
  This option forces the assembler to add BND prefix to all branches, even
  if such prefix was not explicitly specified in the source code.
  
@@ -155,10 +137,10 @@ index 7ca70c9..2100b48 100644
  @end table
  @c man end
  
-diff --git a/gas/testsuite/ChangeLog b/gas/testsuite/ChangeLog
-index be67b6e..afa687d 100644
---- a/gas/testsuite/ChangeLog
-+++ b/gas/testsuite/ChangeLog
+Index: binutils-2.24/gas/testsuite/ChangeLog
+===================================================================
+--- binutils-2.24.orig/gas/testsuite/ChangeLog
++++ binutils-2.24/gas/testsuite/ChangeLog
 @@ -1,3 +1,10 @@
 +2014-08-06  Ilya Tocar  <ilya.tocar@intel.com>
 +
@@ -170,11 +152,11 @@ index be67b6e..afa687d 100644
  2013-11-20  Yufeng Zhang  <yufeng.zhang@arm.com>
  
  	* gas/aarch64/msr.s: Add tests.
-diff --git a/gas/testsuite/gas/i386/i386.exp b/gas/testsuite/gas/i386/i386.exp
-index 55ed9de..c2579e1 100644
---- a/gas/testsuite/gas/i386/i386.exp
-+++ b/gas/testsuite/gas/i386/i386.exp
-@@ -267,6 +267,8 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]]
+Index: binutils-2.24/gas/testsuite/gas/i386/i386.exp
+===================================================================
+--- binutils-2.24.orig/gas/testsuite/gas/i386/i386.exp
++++ binutils-2.24/gas/testsuite/gas/i386/i386.exp
+@@ -267,6 +267,8 @@ if [expr ([istarget "i*86-*-*"] ||  [ist
      run_list_test "mpx-inval-1" "-al"
      run_dump_test "mpx-add-bnd-prefix"
      run_dump_test "sha"
@@ -183,11 +165,10 @@ index 55ed9de..c2579e1 100644
  
      # These tests require support for 8 and 16 bit relocs,
      # so we only run them for ELF and COFF targets.
-diff --git a/gas/testsuite/gas/i386/omit-lock-no.d b/gas/testsuite/gas/i386/omit-lock-no.d
-new file mode 100644
-index 0000000..87f796f
+Index: binutils-2.24/gas/testsuite/gas/i386/omit-lock-no.d
+===================================================================
 --- /dev/null
-+++ b/gas/testsuite/gas/i386/omit-lock-no.d
++++ binutils-2.24/gas/testsuite/gas/i386/omit-lock-no.d
 @@ -0,0 +1,12 @@
 +#source: omit-lock.s
 +#as: -momit-lock-prefix=yes  -momit-lock-prefix=no
@@ -201,11 +182,10 @@ index 0000000..87f796f
 +0+ <main>:
 +   0:	f0 f0 83 00 01       	lock lock addl \$0x1,\(%eax\)
 +#pass
-diff --git a/gas/testsuite/gas/i386/omit-lock-yes.d b/gas/testsuite/gas/i386/omit-lock-yes.d
-new file mode 100644
-index 0000000..67f0ef1
+Index: binutils-2.24/gas/testsuite/gas/i386/omit-lock-yes.d
+===================================================================
 --- /dev/null
-+++ b/gas/testsuite/gas/i386/omit-lock-yes.d
++++ binutils-2.24/gas/testsuite/gas/i386/omit-lock-yes.d
 @@ -0,0 +1,12 @@
 +#source: omit-lock.s
 +#as: -momit-lock-prefix=yes
@@ -219,11 +199,10 @@ index 0000000..67f0ef1
 +0+ <main>:
 +   0:	83 00 01             	addl   \$0x1,\(%eax\)
 +#pass
-diff --git a/gas/testsuite/gas/i386/omit-lock.s b/gas/testsuite/gas/i386/omit-lock.s
-new file mode 100644
-index 0000000..3a6a065
+Index: binutils-2.24/gas/testsuite/gas/i386/omit-lock.s
+===================================================================
 --- /dev/null
-+++ b/gas/testsuite/gas/i386/omit-lock.s
++++ binutils-2.24/gas/testsuite/gas/i386/omit-lock.s
 @@ -0,0 +1,6 @@
 +        .code32
 +.globl main
@@ -231,6 +210,3 @@ index 0000000..3a6a065
 +main:
 +        lock
 +        lock addl $0x1,(%eax)
--- 
-1.7.9.5
-
